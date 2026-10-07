@@ -16,6 +16,8 @@ class Settings(BaseSettings):
 
     # Secret. Empty by default so the app can start without it for now.
     gemini_api_key: str = ""
+    # Local embedding model (downloaded once, then cached).
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
 
 
 # One shared instance that the rest of the app imports.
