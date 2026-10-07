@@ -18,7 +18,9 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     # Local embedding model (downloaded once, then cached).
     embedding_model: str = "BAAI/bge-small-en-v1.5"
-
+    
+    # Below this similarity, a question is treated as "not in the documents".
+    min_similarity: float = 0.55
 
 # One shared instance that the rest of the app imports.
 settings = Settings()
