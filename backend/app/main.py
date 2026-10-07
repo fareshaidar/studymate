@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 
+from app.config import settings
+
 app = FastAPI(
-    title="StudyMate API",
+    title=settings.app_name,
     description="RAG-based study assistant with cited answers.",
     version="0.1.0",
 )
