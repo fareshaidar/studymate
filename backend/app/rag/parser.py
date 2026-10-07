@@ -12,6 +12,12 @@ class Page:
     text: str
 
 
+def count_pages(pdf_path: Path) -> int:
+    """Total number of pages in a PDF, including blank ones."""
+    with pymupdf.open(pdf_path) as doc:
+        return len(doc)
+
+
 def extract_pages(pdf_path: Path) -> list[Page]:
     """Extract text from each page of a PDF.
 

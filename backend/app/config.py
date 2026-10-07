@@ -22,5 +22,8 @@ class Settings(BaseSettings):
     # Below this similarity, a question is treated as "not in the documents".
     min_similarity: float = 0.55
 
+    # Largest PDF the upload endpoint accepts.
+    max_upload_mb: int = 50
+
 # One shared instance that the rest of the app imports.
 settings = Settings()
