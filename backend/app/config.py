@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     # Gemini model used for answers (must be a free-tier model while we're on the free tier).
     gemini_model: str = "gemini-3.8-flash"
+    # Optional: used for the rest of a request when the main model returns 503. Empty = off.
+    gemini_fallback_model: str = ""
     # Retries for rate limits / transient errors: the delay doubles each attempt.
     llm_max_retries: int = 3
     llm_retry_base_delay: float = 1.0
@@ -31,6 +33,9 @@ class Settings(BaseSettings):
     min_similarity: float = 0.55
     # How many chunks to retrieve per question (before the similarity filter).
     retrieval_top_k: int = 5
+    # Chunks where fewer than this share of characters are letters/digits
+    # (e.g. text diagrams drawn with box characters) are not used as sources.
+    min_alnum_ratio: float = 0.5
 
     # Largest PDF the upload endpoint accepts.
     max_upload_mb: int = 50

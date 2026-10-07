@@ -1,3 +1,4 @@
+import logging
 import re
 import time
 from collections.abc import Callable, Iterator
@@ -11,7 +12,9 @@ from app.config import settings
 from app.llm.base import LLMClient, retry_call, retry_stream
 from app.llm.errors import LLMError, MissingAPIKeyError, ProviderError, RateLimitError
 
-EMPTY_ANSWER_MESSAGE = "The AI couldn't produce an answer for this request. Try rephrasing it."
+logger = logging.getLogger(__name__)
+
+EMPTY_ANSWER_MESSAGE ="The AI couldn't produce an answer for this request. Try rephrasing it."
 
 
 class GeminiClient(LLMClient):
@@ -30,16 +33,24 @@ class GeminiClient(LLMClient):
         max_retries: int | None = None,
         base_delay: float | None = None,
         timeout_seconds: int | None = None,
+        fallback_model: str | None = None,
         sleep: Callable[[float], None] = time.sleep,
     ):
         key = settings.gemini_api_key if api_key is None else api_key
         if not key:
             raise MissingAPIKeyError("GEMINI_API_KEY is not set.")
         self.model = model or settings.gemini_model
+        fallback = settings.gemini_fallback_model if fallback_model is None else fallback_model
+        # Used for the rest of a request once the primary model returns 503. Empty = off.
+        self.fallback_model = fallback if fallback and fallback != self.model else None
         timeout = timeout_seconds or settings.llm_timeout_seconds
-        # The SDK expects the timeout in milliseconds.
         self._client = client or genai.Client(
-            api_key=key, http_options=types.HttpOptions(timeout=timeout * 1000)
+            api_key=key,
+            http_options=types.HttpOptions(
+                timeout=timeout * 1000,  # the SDK expects milliseconds
+                # One attempt per SDK call: retry_call is our only retry layer.
+                retry_options=types.HttpRetryOptions(attempts=1),
+            ),
         )
         self._retry = {
             "max_retries": settings.llm_max_retries if max_retries is None else max_retries,
@@ -48,10 +59,12 @@ class GeminiClient(LLMClient):
         }
 
     def generate(self, prompt: str, system: str | None = None) -> str:
-        def call() -> str:
-            with _translated_errors(self.model):
+        model = self.model  # per request: may switch to the fallback
+
+        def attempt() -> str:
+            with _translated_errors(model):
                 response = self._client.models.generate_content(
-                    model=self.model, contents=prompt, config=_config(system)
+                    model=model, contents=prompt, config=_config(system)
                 )
             if not response.text:
                 raise ProviderError(
@@ -60,15 +73,27 @@ class GeminiClient(LLMClient):
                 )
             return response.text
 
+        def call() -> str:
+            nonlocal model
+            try:
+                return attempt()
+            except ProviderError as e:
+                if not self._should_fall_back(e, model):
+                    raise
+                model = self._switch_to_fallback(e)
+                return attempt()
+
         return retry_call(call, **self._retry)
 
     def stream(self, prompt: str, system: str | None = None) -> Iterator[str]:
-        def open_stream() -> Iterator[str]:
+        model = self.model  # per request: may switch to the fallback
+
+        def open_stream_for(current: str) -> Iterator[str]:
             last_chunk = None
             got_text = False
-            with _translated_errors(self.model):
+            with _translated_errors(current):
                 for chunk in self._client.models.generate_content_stream(
-                    model=self.model, contents=prompt, config=_config(system)
+                    model=current, contents=prompt, config=_config(system)
                 ):
                     last_chunk = chunk
                     if chunk.text:
@@ -80,7 +105,37 @@ class GeminiClient(LLMClient):
                     user_message=EMPTY_ANSWER_MESSAGE,
                 )
 
+        def open_stream() -> Iterator[str]:
+            nonlocal model
+            started = False
+            try:
+                for piece in open_stream_for(model):
+                    started = True
+                    yield piece
+            except ProviderError as e:
+                # Once text was sent, switching models would repeat it.
+                if started or not self._should_fall_back(e, model):
+                    raise
+                model = self._switch_to_fallback(e)
+                yield from open_stream_for(model)
+
         return retry_stream(open_stream, **self._retry)
+
+    def _should_fall_back(self, error: ProviderError, current_model: str) -> bool:
+        return (
+            error.status_code == 503
+            and self.fallback_model is not None
+            and current_model != self.fallback_model
+        )
+
+    def _switch_to_fallback(self, error: ProviderError) -> str:
+        logger.warning(
+            "Gemini model %s unavailable (%s); using fallback %s for this request",
+            self.model,
+            error,
+            self.fallback_model,
+        )
+        return self.fallback_model
 
 
 def _config(system: str | None) -> types.GenerateContentConfig | None:

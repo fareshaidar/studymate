@@ -51,6 +51,7 @@ def test_chat_returns_answer_and_sources(env):
     assert response.status_code == 200
     body = response.json()
     assert body["found"] is True
+    assert body["reason"] == "ok"
     assert body["answer"] == "GAs use selection and mutation [1]."
     assert body["sources"] == [
         {
@@ -72,7 +73,12 @@ def test_not_found_answer(env, monkeypatch):
 
     body = client.post("/chat", json={"question": "Best pizza in Naples?"}).json()
 
-    assert body == {"answer": "I couldn't find this in your documents.", "found": False, "sources": []}
+    assert body == {
+        "answer": "I couldn't find this in your documents.",
+        "found": False,
+        "reason": "no_relevant_chunks",
+        "sources": [],
+    }
     assert llm.calls == []
 
 

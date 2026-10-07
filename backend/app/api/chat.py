@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db, get_llm_client, get_vector_store
 from app.llm.base import LLMClient
 from app.rag.vectorstore import VectorStore
-from app.services.chat import UnknownDocumentError, answer_question
+from app.services.chat import Reason, UnknownDocumentError, answer_question
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -36,6 +36,7 @@ class SourceOut(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     found: bool
+    reason: Reason
     sources: list[SourceOut]
 
 

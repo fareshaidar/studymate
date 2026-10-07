@@ -56,9 +56,10 @@ class FakeModels:
 
 def make_client(*outcomes, **kwargs):
     models = FakeModels(outcomes)
-    client = GeminiClient(
-        api_key="test-key", client=SimpleNamespace(models=models), sleep=lambda _: None, **kwargs
-    )
+    kwargs.setdefault("fallback_model", "")  # off unless a test turns it on
+    kwargs.setdefault("sleep", lambda _: None)
+    kwargs.setdefault("model", "primary-model")
+    client = GeminiClient(api_key="test-key", client=SimpleNamespace(models=models), **kwargs)
     return client, models
 
 
@@ -76,11 +77,13 @@ def test_timeout_and_key_are_passed_to_the_sdk(monkeypatch):
     GeminiClient(api_key="test-key")
     assert created["api_key"] == "test-key"
     assert created["http_options"].timeout == 60_000  # milliseconds
+    # The SDK must not retry on its own: retry_call is the only retry layer.
+    assert created["http_options"].retry_options.attempts == 1
 
 
 def test_generate_uses_model_from_settings_and_system_prompt(monkeypatch):
     monkeypatch.setattr(settings, "gemini_model", "gemini-test-model")
-    client, models = make_client(reply("Hi there"))
+    client, models = make_client(reply("Hi there"), model=None)
     assert client.generate("Hello", system="Be kind.") == "Hi there"
     call = models.calls[0]
     assert call["model"] == "gemini-test-model"
@@ -120,7 +123,9 @@ def test_daily_quota_is_not_retried():
 def test_retry_delay_from_google_is_respected():
     waits = []
     models = FakeModels([rate_limited(retry_delay="7s"), reply("Ok")])
-    client = GeminiClient(api_key="k", client=SimpleNamespace(models=models), sleep=waits.append)
+    client = GeminiClient(
+        api_key="k", client=SimpleNamespace(models=models), fallback_model="", sleep=waits.append
+    )
     client.generate("Hello")
     assert waits[0] >= 7
 
@@ -205,3 +210,77 @@ def test_empty_stream_raises_provider_error():
     client, _ = make_client([""])
     with pytest.raises(ProviderError):
         list(client.stream("Hello"))
+
+
+def unavailable():
+    return api_error(503, "UNAVAILABLE", "The model is overloaded.")
+
+
+def test_primary_503_switches_to_fallback_without_waiting():
+    waits = []
+    client, models = make_client(
+        unavailable(), reply("From fallback"), fallback_model="backup-model", sleep=waits.append
+    )
+
+    assert client.generate("Hello") == "From fallback"
+    assert [c["model"] for c in models.calls] == ["primary-model", "backup-model"]
+    assert waits == []  # switched immediately, no backoff
+
+
+def test_fallback_errors_go_through_normal_retries():
+    waits = []
+    client, models = make_client(
+        unavailable(), unavailable(), reply("Ok"), fallback_model="backup-model", sleep=waits.append
+    )
+
+    assert client.generate("Hello") == "Ok"
+    # Once switched, the request stays on the fallback, with backoff between tries.
+    assert [c["model"] for c in models.calls] == ["primary-model", "backup-model", "backup-model"]
+    assert len(waits) == 1
+
+
+def test_no_fallback_configured_retries_primary():
+    client, models = make_client(unavailable(), reply("Ok"))
+    assert client.generate("Hello") == "Ok"
+    assert [c["model"] for c in models.calls] == ["primary-model", "primary-model"]
+
+
+def test_rate_limit_does_not_trigger_fallback():
+    client, models = make_client(rate_limited(), reply("Ok"), fallback_model="backup-model")
+    assert client.generate("Hello") == "Ok"
+    assert [c["model"] for c in models.calls] == ["primary-model", "primary-model"]
+
+
+def test_fallback_is_per_request():
+    client, models = make_client(
+        unavailable(), reply("First"), reply("Second"), fallback_model="backup-model"
+    )
+    client.generate("One")
+    client.generate("Two")
+    assert models.calls[-1]["model"] == "primary-model"
+
+
+def test_fallback_from_settings(monkeypatch):
+    monkeypatch.setattr(settings, "gemini_fallback_model", "backup-model")
+    models = FakeModels([unavailable(), reply("Ok")])
+    client = GeminiClient(
+        api_key="k", model="primary-model", client=SimpleNamespace(models=models), sleep=lambda _: None
+    )
+    client.generate("Hello")
+    assert models.calls[1]["model"] == "backup-model"
+
+
+def test_stream_falls_back_before_first_chunk():
+    client, models = make_client(unavailable(), ["Hi", " there"], fallback_model="backup-model")
+    assert list(client.stream("Hello")) == ["Hi", " there"]
+    assert [c["model"] for c in models.calls] == ["primary-model", "backup-model"]
+
+
+def test_stream_does_not_fall_back_after_first_chunk():
+    client, models = make_client(["Partial", unavailable()], fallback_model="backup-model")
+    received = []
+    with pytest.raises(ProviderError):
+        for piece in client.stream("Hello"):
+            received.append(piece)
+    assert received == ["Partial"]
+    assert len(models.calls) == 1

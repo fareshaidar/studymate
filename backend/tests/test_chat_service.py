@@ -58,6 +58,7 @@ def test_below_threshold_never_calls_the_llm(session, store, threshold):
 
     assert llm.calls == []
     assert result.found is False
+    assert result.reason == "no_relevant_chunks"
     assert result.answer == NOT_FOUND_ANSWER
     assert result.sources == []
 
@@ -65,6 +66,7 @@ def test_below_threshold_never_calls_the_llm(session, store, threshold):
 def test_empty_store_returns_not_found(session, store):
     llm = FakeLLMClient()
     result = ask("Anything?", session, store, llm)
+    assert result.reason == "no_relevant_chunks"
     assert result.found is False
     assert llm.calls == []
 
@@ -77,6 +79,7 @@ def test_answer_with_sources(session, store, threshold):
     result = ask("How do genetic algorithms work?", session, store, llm)
 
     assert result.found is True
+    assert result.reason == "ok"
     assert result.answer == "GAs use selection and mutation [1]."
     prompt, system = llm.calls[0]
     assert system == SYSTEM_PROMPT
@@ -167,6 +170,66 @@ def test_orphan_chunks_are_skipped(session, store, threshold):
     assert {s.document_id for s in result.sources} == {"doc1"}
 
 
+def test_orphan_chunks_do_not_take_top_k_slots(session, store, threshold, monkeypatch):
+    # The bug seen on real data: an orphan copy of the same PDF (no DB row) scored
+    # as high as the real chunks, filled top-k, and was then dropped, leaving too few sources.
+    texts = [GA_TEXT, "Selection keeps the fittest individuals.", "Mutation adds variety."]
+    add_document(session, store, "doc1", "ga.pdf", texts)
+    store.add_chunks("ghost", [Chunk(text=t, page=1, index=i) for i, t in enumerate(texts)])
+    threshold(0.0)
+    monkeypatch.setattr(settings, "retrieval_top_k", 3)
+
+    result = ask("How do genetic algorithms work?", session, store, FakeLLMClient(reply="A [1]."))
+
+    assert len(result.sources) == 3
+    assert {s.document_id for s in result.sources} == {"doc1"}
+
+
+DIAGRAM = "┌──────┐ │ Genetic │ └──┬───┘ ↓ ┌──────┐ │ algorithm │ └──┬───┘ ↓ ┌────┐ │ Stop │ └────┘"
+
+
+def test_symbol_heavy_chunk_is_dropped_and_replaced(session, store, threshold, monkeypatch):
+    texts = [DIAGRAM, GA_TEXT, "Selection keeps the fittest genetic algorithm individuals."]
+    add_document(session, store, "doc1", "ga.pdf", texts)
+    threshold(0.0)
+    monkeypatch.setattr(settings, "retrieval_top_k", 2)
+    llm = FakeLLMClient(reply="A [1].")
+
+    result = ask("genetic algorithm", session, store, llm)
+
+    # The diagram is gone, and over-fetching still fills both slots with real text.
+    assert len(result.sources) == 2
+    assert all("┌" not in s.snippet for s in result.sources)
+    assert "┌" not in llm.calls[0][0]
+
+
+def test_mixed_chunk_is_kept_without_diagram_chars(session, store, threshold):
+    mixed = "│ Counter < n_gen ? │ └───┬───┘ ↓ " + GA_TEXT + " It stops after 20 stale generations."
+    add_document(session, store, "doc1", "ga.pdf", [mixed])
+    threshold(0.0)
+    llm = FakeLLMClient(reply="It stops after 20 stale generations [1].")
+
+    result = ask("What stopping condition does the algorithm use?", session, store, llm)
+
+    prompt = llm.calls[0][0]
+    assert "It stops after 20 stale generations." in prompt
+    assert "Counter < n_gen ?" in prompt
+    assert not any(c in prompt for c in "│└┬↓")
+    assert not any(c in result.sources[0].snippet for c in "│└┬↓")
+
+
+def test_reason_is_logged(session, store, threshold, caplog):
+    add_document(session, store, "doc1", "ga.pdf", [GA_TEXT])
+    threshold(0.0)
+
+    with caplog.at_level("INFO", logger="app.services.chat"):
+        ask("How do genetic algorithms work?", session, store, FakeLLMClient(reply="A [1]."))
+
+    assert "chat reason=ok retrieved=1 kept=1" in caplog.text
+    # The question itself is not logged.
+    assert "genetic" not in caplog.text
+
+
 @pytest.mark.parametrize(
     "reply",
     ["I couldn't find this in your documents.", "Sorry, I could not find this in your documents"],
@@ -178,6 +241,7 @@ def test_llm_not_found_reply_means_not_found(session, store, threshold, reply):
     result = ask("What is the capital of France?", session, store, FakeLLMClient(reply=reply))
 
     assert result.found is False
+    assert result.reason == "model_declined"
     assert result.answer == NOT_FOUND_ANSWER
     assert result.sources == []
 
