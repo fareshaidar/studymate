@@ -16,6 +16,14 @@ class Settings(BaseSettings):
 
     # Secret. Empty by default so the app can start without it for now.
     gemini_api_key: str = ""
+    # Gemini model used for answers (must be a free-tier model while we're on the free tier).
+    gemini_model: str = "gemini-3.8-flash"
+    # Retries for rate limits / transient errors: the delay doubles each attempt.
+    llm_max_retries: int = 3
+    llm_retry_base_delay: float = 1.0
+    # Give up on a single LLM request after this long.
+    llm_timeout_seconds: int = 60
+
     # Local embedding model (downloaded once, then cached).
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     

@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db.database import SessionLocal
+from app.llm.base import LLMClient
+from app.llm.gemini import GeminiClient
 from app.rag.vectorstore import VectorStore
 
 
@@ -19,6 +21,17 @@ def get_db() -> Iterator[Session]:
 def get_vector_store() -> VectorStore:
     """One shared vector store for the whole app."""
     return VectorStore()
+
+
+@lru_cache(maxsize=1)
+def get_llm_client() -> LLMClient:
+    """One shared LLM client, created on first use (not at startup).
+
+    So the app still starts without an API key; only requests that need the LLM
+    fail, with MissingAPIKeyError. A failed attempt isn't cached, so adding the
+    key later works without restarting the app.
+    """
+    return GeminiClient()
 
 
 def get_upload_dir() -> Path:
