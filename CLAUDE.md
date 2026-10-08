@@ -14,16 +14,22 @@ Environment: Windows, PowerShell, Python 3.11, venv at backend/.venv.
 - Frontend later: React + Vite + TypeScript + Tailwind
 
 ## Done so far
-Phases 0 to 6 are complete: ingestion API (upload/list/delete), LLM client
+Phases 0 to 7 are complete: ingestion API (upload/list/delete), LLM client
 with retries and an optional fallback model, POST /chat with a similarity
 threshold, citation validation, a reason field, the orphan-chunk fix and the
 diagram-noise filter; conversations (stored messages, follow-up rewriting with
 fallback, history in the prompt, /conversations endpoints); study tools
 (/study/summary map-reduce with an LLM call cap, /study/quiz and
 /study/flashcards with Pydantic-validated JSON, one retry, sources from
-passage numbers, server-side option shuffle).
+passage numbers, server-side option shuffle); evaluation (backend/evaluation/:
+65-question dataset, 55 tuning + 10 owner-written held-out, never used to choose
+settings; retrieval and answer runners on a temporary index, LLM judge, reply
+cache and call cap; baseline reports in docs/evaluation/).
+Setting defaults are unchanged; candidate changes (min_similarity 0.60, top_k 8,
+front-matter filter) await my decision.
+Evaluation PDFs are git-ignored; never commit them or backend/evaluation/results/.
 Notes are in docs/phase-notes/.
-Next: Phase 7 (evaluation).
+Next: Phase 8 (frontend).
 
 ## Roadmap (one phase at a time, never start the next without my OK)
 5 Conversation, 6 Study tools, 7 Evaluation, 8 Frontend, 9 Hardening,
