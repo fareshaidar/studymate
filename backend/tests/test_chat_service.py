@@ -5,7 +5,8 @@ from app.config import settings
 from app.db.database import Base, make_engine
 from app.db.models import Document
 from app.rag.chunker import Chunk
-from app.rag.prompts import NOT_FOUND_ANSWER, SYSTEM_PROMPT
+from app.llm.errors import ProviderError, RateLimitError
+from app.rag.prompts import NOT_FOUND_ANSWER, REWRITE_SYSTEM_PROMPT, SYSTEM_PROMPT, HistoryMessage
 from app.rag.vectorstore import VectorStore
 from app.services.chat import UnknownDocumentError, answer_question
 from tests.fakes import FakeLLMClient
@@ -257,3 +258,141 @@ def test_long_chunks_get_a_short_snippet(session, store, threshold):
     assert len(snippet) <= 201
     assert snippet.endswith("…")
     assert not snippet[:-1].endswith(" ")
+
+
+# --- Conversation history and query rewriting ---
+
+HISTORY = [
+    HistoryMessage("user", "How do genetic algorithms work?"),
+    HistoryMessage("assistant", "They evolve a population using selection and mutation [1]."),
+]
+FOLLOW_UP = "And what does the second one do?"
+STANDALONE = "What does mutation do in a genetic algorithm?"
+
+
+@pytest.fixture
+def search_spy(store, monkeypatch):
+    """Record the text each `store.search` call was made with."""
+    queries = []
+    real_search = store.search
+
+    def spy(query, *args, **kwargs):
+        queries.append(query)
+        return real_search(query, *args, **kwargs)
+
+    monkeypatch.setattr(store, "search", spy)
+    return queries
+
+
+def ask_follow_up(session, store, llm, history=HISTORY):
+    return answer_question(
+        FOLLOW_UP, None, session=session, store=store, llm=llm, history=history
+    )
+
+
+def test_follow_up_is_rewritten_and_retrieval_uses_it(session, store, threshold, search_spy):
+    add_document(session, store, "doc1", "ga.pdf", [GA_TEXT])
+    threshold(0.0)
+    llm = FakeLLMClient(replies=[STANDALONE, "Mutation adds variety [1]."])
+
+    result = ask_follow_up(session, store, llm)
+
+    assert search_spy == [STANDALONE]
+    assert result.rewritten_question == STANDALONE
+    assert result.answer == "Mutation adds variety [1]."
+    rewrite_prompt, rewrite_system = llm.calls[0]
+    assert rewrite_system == REWRITE_SYSTEM_PROMPT
+    assert FOLLOW_UP in rewrite_prompt
+    assert "Student: How do genetic algorithms work?" in rewrite_prompt
+    answer_prompt, answer_system = llm.calls[1]
+    assert answer_system == SYSTEM_PROMPT
+    assert "Conversation so far" in answer_prompt
+    assert answer_prompt.rstrip().endswith(f"Question: {STANDALONE}")
+
+
+def test_first_question_is_not_rewritten(session, store, threshold, search_spy):
+    add_document(session, store, "doc1", "ga.pdf", [GA_TEXT])
+    threshold(0.0)
+    llm = FakeLLMClient(reply="A [1].")
+
+    result = ask("How do genetic algorithms work?", session, store, llm)
+
+    assert len(llm.calls) == 1
+    assert llm.calls[0][1] == SYSTEM_PROMPT
+    assert "Conversation so far" not in llm.calls[0][0]
+    assert search_spy == ["How do genetic algorithms work?"]
+    assert result.rewritten_question is None
+
+
+@pytest.mark.parametrize(
+    "error", [ProviderError("boom", status_code=500), RateLimitError("429", daily_quota=True)]
+)
+def test_rewrite_failure_falls_back_to_original(
+    session, store, threshold, search_spy, caplog, error
+):
+    add_document(session, store, "doc1", "ga.pdf", [GA_TEXT])
+    threshold(0.0)
+    llm = FakeLLMClient(replies=[error, "Mutation adds variety [1]."])
+
+    with caplog.at_level("WARNING", logger="app.services.chat"):
+        result = ask_follow_up(session, store, llm)
+
+    assert search_spy == [FOLLOW_UP]
+    assert result.rewritten_question is None
+    assert result.answer == "Mutation adds variety [1]."
+    assert f"rewrite failed error={type(error).__name__}" in caplog.text
+    assert FOLLOW_UP not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("reply", "reason"),
+    [
+        ("   ", "empty"),
+        ("x" * 501, "too_long"),
+        ("What does mutation do?\nMutation adds variety.", "multiline"),
+    ],
+)
+def test_unusable_rewrite_falls_back_to_original(
+    session, store, threshold, search_spy, caplog, reply, reason
+):
+    add_document(session, store, "doc1", "ga.pdf", [GA_TEXT])
+    threshold(0.0)
+    llm = FakeLLMClient(replies=[reply, "Mutation adds variety [1]."])
+
+    with caplog.at_level("WARNING", logger="app.services.chat"):
+        result = ask_follow_up(session, store, llm)
+
+    assert search_spy == [FOLLOW_UP]
+    assert result.rewritten_question is None
+    assert f"rewrite rejected reason={reason}" in caplog.text
+
+
+def test_rewrite_is_stripped_and_500_chars_is_allowed(session, store, threshold, search_spy):
+    add_document(session, store, "doc1", "ga.pdf", [GA_TEXT])
+    threshold(0.0)
+    long_ok = "q" * 500
+    llm = FakeLLMClient(replies=[f"  {long_ok}\n", "A [1]."])
+
+    result = ask_follow_up(session, store, llm)
+
+    assert search_spy == [long_ok]
+    assert result.rewritten_question == long_ok
+
+
+def test_no_documents_means_no_llm_call_even_with_history(session, store):
+    llm = FakeLLMClient()
+    result = ask_follow_up(session, store, llm)
+    assert llm.calls == []
+    assert result.reason == "no_relevant_chunks"
+
+
+def test_history_and_rewrite_are_logged_without_text(session, store, threshold, caplog):
+    add_document(session, store, "doc1", "ga.pdf", [GA_TEXT])
+    threshold(0.0)
+    llm = FakeLLMClient(replies=[STANDALONE, "Mutation adds variety [1]."])
+
+    with caplog.at_level("INFO", logger="app.services.chat"):
+        ask_follow_up(session, store, llm)
+
+    assert "history=2 rewritten=True" in caplog.text
+    assert "mutation" not in caplog.text.lower()
