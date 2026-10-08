@@ -73,8 +73,19 @@ def test_no_llm_run_creates_no_client_and_only_reports_refusals(tmp_path, setup,
     assert main(args(tmp_path, out) + ["--no-llm"], **NO_SLEEP) == 0
 
     report = (out / "answer-report-none.md").read_text(encoding="utf-8")
-    assert "## Refusals" in report and "## Citations" not in report
-    assert "| unanswerable_off_topic | 1 | 100% (1/1) | 100% (1/1) |" in report
+    assert "## Retrieval-layer refusals" in report and "## Citations" not in report
+    assert "| unanswerable_off_topic | 1 | 100% (1/1) |" in report
+
+
+def test_no_llm_counts_questions_that_pass_retrieval_in_the_denominator(tmp_path, setup):
+    # min_similarity is 0 here: nothing is refused, and the report must say 0%, not "–".
+    out = tmp_path / "results"
+
+    main(args(tmp_path, out) + ["--no-llm"], **NO_SLEEP)
+
+    report = (out / "answer-report-none.md").read_text(encoding="utf-8")
+    assert "| unanswerable_off_topic | 1 | 0% (0/1) |" in report
+    assert "| answerable | 2 | 0% (0/2) |" in report
 
 
 def test_limit_takes_items_round_robin(tmp_path, setup):

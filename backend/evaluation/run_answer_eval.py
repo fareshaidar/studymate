@@ -284,6 +284,24 @@ def _refusal_table(cases: Sequence[AnswerCase]) -> list[str]:
     return table(headers, rows)
 
 
+def _retrieval_layer_table(cases: Sequence[AnswerCase]) -> list[str]:
+    """--no-llm: refusals by the retrieval layer out of ALL items of each type.
+
+    The other items would need the LLM to decide, so they count as "passed on",
+    not as skipped: dropping them would make the refusal rate look perfect.
+    Follow-ups are searched as typed, since rewriting needs the LLM.
+    """
+    lines = ["## Retrieval-layer refusals", ""]
+    rows = []
+    for question_type in TYPE_ORDER:
+        of_type = [c for c in cases if c.type == question_type]
+        if of_type:
+            refused = rate(c.reason == "no_relevant_chunks" for c in of_type)
+            rows.append([question_type, len(of_type), pct(refused)])
+    lines += table(["Type", "n", "refused by retrieval (the rest would reach the LLM)"], rows)
+    return lines
+
+
 def _subset_rows(label: str, cases: Sequence[AnswerCase]) -> list[object]:
     refusals = refusal_metrics(cases)
     citations = citation_metrics(cases)
@@ -315,6 +333,8 @@ def render(summary: RunSummary, dataset: EvalDataset) -> str:
         f"cache hits: {summary.cache_hits}.",
         "",
     ]
+    if summary.mode == "none":
+        return "\n".join(lines + _retrieval_layer_table(cases))
     if summary.stopped:
         lines += [f"**The run stopped early:** {summary.stopped}. Rerun to continue (cached "
                   "replies are free).", ""]
@@ -346,8 +366,6 @@ def render(summary: RunSummary, dataset: EvalDataset) -> str:
         "",
     ]
     lines += _refusal_table(cases)
-    if summary.mode == "none":
-        return "\n".join(lines)
 
     citations = citation_metrics(cases)
     lines += ["## Citations", "", "Answered questions that have expected pages.", ""]
