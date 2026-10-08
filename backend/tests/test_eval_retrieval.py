@@ -6,8 +6,8 @@ from app.rag.chunker import Chunk
 from app.rag.vectorstore import VectorStore
 from app.services.chat import retrieve
 from evaluation.harness import BACKEND_DATA_DIR, EvalIndex, UnsafePathError
-from evaluation.metrics import kept_chunks
-from evaluation.run_retrieval_eval import main, rank
+from evaluation.metrics import RankingMetrics, Rate, kept_chunks
+from evaluation.run_retrieval_eval import _hit_rate, main, rank
 from tests.test_eval_dataset import answerable, make_dataset
 
 GA = "A genetic algorithm evolves a population of candidate solutions over many generations."
@@ -125,3 +125,27 @@ def test_output_inside_backend_data_is_refused(tmp_path):
     with pytest.raises(UnsafePathError):
         main(args(tmp_path, target))
     assert not target.exists()
+
+
+def test_hit_rate_turns_the_mean_back_into_counts():
+    metrics = RankingMetrics(n=39, hit={1: 26 / 39, 5: 35 / 39}, recall={}, mrr=0.5)
+
+    assert _hit_rate(metrics, 1) == Rate(26, 39)
+    assert _hit_rate(metrics, 5) == Rate(35, 39)
+
+
+def test_chunk_size_table_prints_counts(tmp_path):
+    dataset = tiny_dataset(tmp_path)
+    (tmp_path / "dataset.json").write_text(dataset.model_dump_json(), encoding="utf-8")
+    out = tmp_path / "results"
+
+    main(args(tmp_path, out) + ["--chunk-sweep"])
+
+    report = (out / "retrieval-report.md").read_text(encoding="utf-8")
+    section = report.split("## Chunk size")[1]
+    rows = [line for line in section.splitlines() if line.startswith("| 1000 ")
+            or line.startswith("| 1800 ") or line.startswith("| 2500 ")]
+    assert len(rows) == 3
+    for row in rows:
+        hit_1, hit_5 = row.split(" | ")[3:5]
+        assert hit_1.endswith("/3)") and hit_5.endswith("/3)")  # e.g. "67% (2/3)"

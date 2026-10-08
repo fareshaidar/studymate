@@ -33,6 +33,8 @@ from evaluation.harness import EvalIndex, ensure_outside_data, temporary_index
 from evaluation.metrics import (
     PageRef,
     RankedChunk,
+    RankingMetrics,
+    Rate,
     RetrievalCase,
     alnum_sweep,
     evaluate_cutoff,
@@ -287,7 +289,7 @@ def render(result: dict, dataset: EvalDataset) -> str:
             m, cut = row["ranking"], row["at_settings"]
             rows.append(
                 [row["max_chars"], row["overlap_chars"], row["chunks"]]
-                + [num(m.hit[k], 2) for k in (1, 5)]
+                + [pct(_hit_rate(m, k)) for k in (1, 5)]
                 + [num(m.mrr, 2), pct(cut.false_refusals), pct(cut.false_answers_on_topic)]
             )
         lines += table(
@@ -296,6 +298,12 @@ def render(result: dict, dataset: EvalDataset) -> str:
             rows,
         )
     return "\n".join(lines)
+
+
+def _hit_rate(m: RankingMetrics, k: int) -> Rate:
+    """hit@k as a count out of n. The stored hit rate is a mean of one 0/1 per question,
+    so rate * n is a whole number; round() only removes floating-point fuzz."""
+    return Rate(round(m.hit[k] * m.n), m.n)
 
 
 def to_json(result: dict) -> str:
