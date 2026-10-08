@@ -90,3 +90,19 @@ front-matter flag, so one search per question gives the numbers with the filter 
   answers.
 - **Future work** (README): keyword or hybrid search, a re-ranker, smaller or section-aware
   chunks, each measured the same way.
+
+## Step 3: API key and quota handling
+
+- **`GET /health`** now also returns `llm_configured`: whether a Gemini key is set, as a
+  boolean only (never the key). It doesn't call the LLM, so a wrong key still shows true; the
+  first real request reports that with its own message.
+- **Amber banner** when the key is missing: "The AI isn't set up yet: add GEMINI_API_KEY=<your
+  key> to backend/.env, then restart the backend. Uploading and browsing still work; questions
+  and study tools need the key." It uses the same re-checks as the offline banner (every 30 s,
+  on returning to the tab, "Check now"). An older backend without the field raises no warning.
+- **A key needs a restart.** `settings` reads `backend/.env` once at startup; the comment in
+  `deps.py` that claimed otherwise was corrected. (A `.env` re-read was considered and declined
+  by the owner, in favour of the plain "restart the backend" instruction.)
+- **Daily quota → 429**, with no `Retry-After` and the message "…Please try again tomorrow.",
+  for chat and the study tools (shared error handler). The UI offers no Retry on a 429. A
+  per-minute limit stays 503 with `Retry-After` and the countdown.

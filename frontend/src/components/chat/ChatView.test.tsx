@@ -227,6 +227,20 @@ describe("ChatView", () => {
     expect(onConversationStarted).not.toHaveBeenCalled();
   });
 
+  it("offers no Retry when the daily limit is used up", async () => {
+    vi.mocked(sendChat).mockRejectedValue(
+      new ApiError(429, "The daily limit for the AI service has been reached. Please try again tomorrow."),
+    );
+    render(<Harness />);
+
+    await ask("What is mitosis?");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Please try again tomorrow.");
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+    // As with any failed request, the question goes back in the box.
+    expect(screen.getByLabelText("Your question")).toHaveValue("What is mitosis?");
+  });
+
   it("shows the busy countdown on a 503", async () => {
     vi.mocked(sendChat).mockRejectedValue(new ApiError(503, "The model is busy.", 12));
     render(<Harness />);

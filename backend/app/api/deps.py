@@ -28,8 +28,10 @@ def get_llm_client() -> LLMClient:
     """One shared LLM client, created on first use (not at startup).
 
     So the app still starts without an API key; only requests that need the LLM
-    fail, with MissingAPIKeyError. A failed attempt isn't cached, so adding the
-    key later works without restarting the app.
+    fail, with MissingAPIKeyError. The key comes from `settings`, which reads
+    backend/.env once at startup: a key added to .env later needs a backend
+    restart. (A failed attempt isn't cached, so after the restart the next
+    request creates the client.)
     """
     return GeminiClient()
 

@@ -30,5 +30,10 @@ register_error_handlers(app)
 
 
 @app.get("/health")
-def health_check() -> dict[str, str]:
-    return {"status": "ok"}
+def health_check() -> dict[str, str | bool]:
+    """Liveness, plus whether an LLM API key is set, so the UI can warn before a question fails.
+
+    Only a boolean: never the key or any part of it. It doesn't call the LLM, so a key
+    that is set but wrong still shows true (the first real request reports that clearly).
+    """
+    return {"status": "ok", "llm_configured": bool(settings.gemini_api_key)}

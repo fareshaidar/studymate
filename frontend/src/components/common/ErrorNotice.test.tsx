@@ -51,6 +51,19 @@ describe("ErrorNotice", () => {
     expect(onNewChat).toHaveBeenCalledTimes(1);
   });
 
+  it("offers no Retry when the daily limit is used up (429)", () => {
+    render(
+      <ErrorNotice
+        error={new ApiError(429, "The daily limit for the AI service has been reached. Please try again tomorrow.")}
+        onRetry={vi.fn()}
+        onNewChat={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Please try again tomorrow.");
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
   it("offers no Retry for a 422", () => {
     render(<ErrorNotice error={new ApiError(422, "question: too long")} onRetry={vi.fn()} />);
 

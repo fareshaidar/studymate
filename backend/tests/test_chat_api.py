@@ -114,6 +114,20 @@ def test_rate_limit_is_503_with_retry_after(env):
     assert response.json()["detail"] == RateLimitError.user_message
 
 
+def test_daily_quota_is_429_without_retry_after(env):
+    client, use_llm = env
+    # Even if the provider suggests a wait, the daily quota won't be back in seconds.
+    use_llm(FakeLLMClient(error=RateLimitError("429 quota", retry_after=30, daily_quota=True)))
+
+    response = client.post("/chat", json={"question": "How do GAs work?"})
+
+    assert response.status_code == 429
+    assert "Retry-After" not in response.headers
+    assert response.json()["detail"] == (
+        "The daily limit for the AI service has been reached. Please try again tomorrow."
+    )
+
+
 def test_provider_error_is_502(env):
     client, use_llm = env
     use_llm(FakeLLMClient(error=ProviderError("Gemini error 500 INTERNAL: boom", status_code=500)))

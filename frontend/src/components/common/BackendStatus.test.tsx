@@ -71,6 +71,45 @@ describe("BackendStatus", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("warns about a missing API key until a re-check finds one", async () => {
+    vi.mocked(getHealth).mockResolvedValue({ status: "ok", llm_configured: false });
+    render(<BackendStatus />);
+    await settle();
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The AI isn't set up yet: add GEMINI_API_KEY=<your key> to backend/.env, then restart " +
+        "the backend. Uploading and browsing still work; questions and study tools need the key.",
+    );
+
+    // The backend was restarted with a key.
+    vi.mocked(getHealth).mockResolvedValue({ status: "ok", llm_configured: true });
+    await act(async () => vi.advanceTimersByTime(HEALTH_CHECK_MS));
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("raises no key warning when an older backend doesn't send llm_configured", async () => {
+    vi.mocked(getHealth).mockResolvedValue({ status: "ok" });
+
+    render(<BackendStatus />);
+    await settle();
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows the offline banner, not the key warning, when the backend is down", async () => {
+    vi.mocked(getHealth).mockResolvedValue({ status: "ok", llm_configured: false });
+    render(<BackendStatus />);
+    await settle();
+
+    vi.mocked(getHealth).mockImplementation(down);
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
+    await settle();
+
+    expect(screen.getByRole("alert")).toHaveTextContent("not responding");
+    expect(screen.queryByText(/isn't set up yet/)).not.toBeInTheDocument();
+  });
+
   it("checks when the browser tab regains focus", async () => {
     vi.mocked(getHealth).mockImplementation(up);
     render(<BackendStatus />);

@@ -32,8 +32,10 @@ export function ErrorNotice({ error, onRetry, onNewChat }: ErrorNoticeProps) {
   }, [secondsLeft]);
 
   const notFound = error.status === 404;
-  // A 404 or a 422 (invalid request) fails the same way again, so no Retry for those.
-  const canRetry = onRetry !== undefined && !notFound && error.status !== 422;
+  // No Retry where retrying fails the same way: 404, 422 (invalid request) and 429
+  // (the AI service's daily limit is used up until tomorrow).
+  const noRetryStatuses = [404, 422, 429];
+  const canRetry = onRetry !== undefined && !noRetryStatuses.includes(error.status);
 
   return (
     <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900">

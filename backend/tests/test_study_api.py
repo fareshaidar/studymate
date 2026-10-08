@@ -168,3 +168,15 @@ def test_rate_limit_is_503(env):
 
     assert response.status_code == 503
     assert response.headers["Retry-After"] == "5"
+
+
+def test_daily_quota_is_429(env):
+    # The study tools share the chat's error handler.
+    client, use_llm = env
+    use_llm(FakeLLMClient(error=RateLimitError("429 quota", daily_quota=True)))
+
+    response = client.post("/study/quiz", json={"num_questions": 3})
+
+    assert response.status_code == 429
+    assert "Retry-After" not in response.headers
+    assert "try again tomorrow" in response.json()["detail"]
