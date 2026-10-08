@@ -235,6 +235,66 @@ describe("App", () => {
     expect(backend.summaryBodies).toEqual([{ document_ids: ["d2"] }]);
   });
 
+  it("asks for an upload first when there are no documents", async () => {
+    fakeBackend([]);
+    render(<App />);
+
+    expect(await screen.findByText("Upload a PDF in the sidebar to start.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Your question")).toBeDisabled();
+
+    await userEvent.click(screen.getByRole("tab", { name: "Study" }));
+    expect(screen.getByText("Upload a PDF in the sidebar to use the study tools.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Summarise" })).toBeDisabled();
+  });
+
+  it("closes the narrow-screen sidebar after a conversation is opened", async () => {
+    fakeBackend([biology], [photosynthesis]);
+    render(<App />);
+    // jsdom applies no CSS, so this checks the toggle's state, not the 768 px breakpoint.
+    const menu = screen.getByRole("button", { name: "Documents & chats" });
+    expect(menu).toHaveAttribute("aria-expanded", "false");
+
+    await userEvent.click(menu);
+    expect(menu).toHaveAttribute("aria-expanded", "true");
+
+    await userEvent.click(await screen.findByRole("button", { name: /^What is photosynthesis\?/ }));
+    expect(menu).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("closes the narrow-screen sidebar with Escape and returns focus to the menu button", async () => {
+    fakeBackend([biology]);
+    render(<App />);
+    const menu = screen.getByRole("button", { name: "Documents & chats" });
+
+    await userEvent.click(menu);
+    await userEvent.click(await screen.findByRole("checkbox", { name: /biology\.pdf/ }));
+    await userEvent.keyboard("{Escape}");
+
+    expect(menu).toHaveAttribute("aria-expanded", "false");
+    expect(menu).toHaveFocus();
+  });
+
+  it("reloads the lists when the backend comes back", async () => {
+    let backendUp = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (!backendUp) throw new TypeError("Failed to fetch");
+        if (url === "/api/documents") return json([biology]);
+        if (url === "/api/conversations") return json([]);
+        return json({ status: "ok" });
+      }),
+    );
+    render(<App />);
+    expect(await screen.findByText(/Could not load documents/)).toBeInTheDocument();
+
+    backendUp = true;
+    await userEvent.click(screen.getByRole("button", { name: "Check now" }));
+
+    expect(await screen.findByText("biology.pdf")).toBeInTheDocument();
+    expect(screen.queryByText(/backend is not responding/)).not.toBeInTheDocument();
+  });
+
   it("shows the offline banner and list errors when the backend is down", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
 

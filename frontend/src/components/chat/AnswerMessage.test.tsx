@@ -86,6 +86,17 @@ describe("AnswerMessage", () => {
     expect(screen.queryByRole("region", { name: "Source 1" })).not.toBeInTheDocument();
   });
 
+  it("moves focus into the card and back to the chip that opened it", async () => {
+    renderAnswer("First [1]. Again [1].");
+    const [, secondChip] = screen.getAllByRole("button", { name: chipName });
+
+    await userEvent.click(secondChip);
+    expect(screen.getByRole("region", { name: "Source 1" })).toHaveFocus();
+
+    await userEvent.keyboard("{Escape}");
+    expect(secondChip).toHaveFocus();
+  });
+
   it("shows the sources under the answer", () => {
     renderAnswer();
 

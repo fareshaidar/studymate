@@ -6,10 +6,10 @@ import { useRequest } from "../../lib/useRequest";
 import { ErrorNotice } from "../common/ErrorNotice";
 import { NotFoundNotice } from "../common/NotFoundNotice";
 import { ItemSourceLink } from "./ItemSourceLink";
-import { StudyForm } from "./StudyForm";
+import { StudyForm, type StudyPanelProps } from "./StudyForm";
 
 /** A multiple-choice quiz from the ticked documents. */
-export function QuizPanel({ documentIds }: { documentIds: string[] }) {
+export function QuizPanel({ documentIds, disabled = false }: StudyPanelProps) {
   const { result, pending, failure, run, retry } = useRequest<QuizResponse>();
 
   return (
@@ -17,6 +17,7 @@ export function QuizPanel({ documentIds }: { documentIds: string[] }) {
       <StudyForm
         buttonLabel="Make quiz"
         pending={pending}
+        disabled={disabled}
         count={{ label: "Questions", initial: 5, max: MAX_QUIZ_QUESTIONS }}
         onGenerate={(topic, numQuestions) =>
           void run(() => getQuiz({ documentIds, topic, numQuestions }))

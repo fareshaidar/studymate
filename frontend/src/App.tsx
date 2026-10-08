@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import { errorMessage } from "./api/client";
 import { deleteConversation, getConversation, listConversations } from "./api/conversations";
@@ -8,6 +8,7 @@ import { ChatView } from "./components/chat/ChatView";
 import type { ChatMessage } from "./components/chat/MessageList";
 import { BackendStatus } from "./components/common/BackendStatus";
 import { ErrorNotice } from "./components/common/ErrorNotice";
+import { tabId, tabPanelId, Tabs, type TabItem } from "./components/common/Tabs";
 import { ConversationList } from "./components/conversations/ConversationList";
 import { DocumentPanel } from "./components/documents/DocumentPanel";
 import { StudyView } from "./components/study/StudyView";
@@ -21,7 +22,7 @@ import {
 
 type Tab = "chat" | "study";
 
-const TABS: { id: Tab; label: string }[] = [
+const TABS: TabItem<Tab>[] = [
   { id: "chat", label: "Chat" },
   { id: "study", label: "Study" },
 ];
@@ -33,14 +34,17 @@ interface FailedOpen {
 }
 
 /**
- * The whole page: a sidebar (documents, conversations) and a main area with the chat.
+ * The whole page: a sidebar (documents, conversations) and a main area with
+ * the Chat and Study tabs.
  *
  * The lists, the selection and the current conversation live here, not in the
- * sidebar or the chat, because both of those (and the study tools in a later
- * step) need them.
+ * sidebar or the tabs, because several of them need the same data.
  */
 export default function App() {
   const [tab, setTab] = useState<Tab>("chat");
+  // Narrow screens only: whether the sidebar is shown over the page.
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
   const [documents, setDocuments] = useState<DocumentInfo[] | null>(null);
   const [documentsError, setDocumentsError] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[] | null>(null);
@@ -66,6 +70,8 @@ export default function App() {
     () => (documents ? new Set(documents.map((doc) => doc.id)) : undefined),
     [documents],
   );
+  // Only once the list has loaded, so the hint doesn't flash while it loads.
+  const noDocuments = documents !== null && documents.length === 0;
 
   const refreshDocuments = useCallback(async (): Promise<void> => {
     try {
@@ -145,10 +151,57 @@ export default function App() {
     await refreshConversations();
   }
 
+  function closeSidebar(): void {
+    setSidebarOpen(false);
+    menuButton.current?.focus(); // back to the button that opened it
+  }
+
+  function handleSidebarKeyDown(event: KeyboardEvent<HTMLElement>): void {
+    if (event.key === "Escape" && sidebarOpen) {
+      closeSidebar();
+    }
+  }
+
+  function handleBackOnline(): void {
+    // The backend was started after the page loaded: fetch what we couldn't before.
+    void refreshDocuments();
+    void refreshConversations();
+  }
+
   return (
-    <div className="flex h-screen bg-gray-50 text-gray-900">
-      <aside className="w-80 shrink-0 space-y-6 overflow-y-auto border-r border-gray-200 bg-white p-4">
-        <h1 className="text-xl font-bold">StudyMate</h1>
+    // Narrow screens: a column with a top bar; from Tailwind's md breakpoint (768 px) up, side by side.
+    <div className="flex h-screen flex-col bg-gray-50 text-gray-900 md:flex-row">
+      <header className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-2 md:hidden">
+        <span className="text-lg font-bold">StudyMate</span>
+        <button
+          ref={menuButton}
+          type="button"
+          aria-expanded={sidebarOpen}
+          aria-controls="sidebar"
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="rounded border border-gray-300 px-3 py-1 text-sm"
+        >
+          Documents &amp; chats
+        </button>
+      </header>
+
+      <aside
+        id="sidebar"
+        aria-label="Documents and conversations"
+        onKeyDown={handleSidebarKeyDown}
+        // Narrow screens: hidden, or a full-screen layer when opened. Wide screens: always shown.
+        className={`${sidebarOpen ? "fixed inset-0 z-20 block" : "hidden"} space-y-6 overflow-y-auto border-r border-gray-200 bg-white p-4 md:static md:block md:w-80 md:shrink-0`}
+      >
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-bold">StudyMate</h1>
+          <button
+            type="button"
+            onClick={closeSidebar}
+            className="rounded border border-gray-300 px-3 py-1 text-sm md:hidden"
+          >
+            Close
+          </button>
+        </div>
         <DocumentPanel
           documents={documents}
           listError={documentsError}
@@ -160,38 +213,29 @@ export default function App() {
           conversations={conversations}
           listError={conversationsError}
           activeId={conversationId}
-          onOpen={(id) => void handleOpen(id)}
-          onNewChat={handleNewChat}
+          onOpen={(id) => {
+            setSidebarOpen(false); // on narrow screens, show the chat that was picked
+            void handleOpen(id);
+          }}
+          onNewChat={() => {
+            setSidebarOpen(false);
+            handleNewChat();
+          }}
           onDelete={handleDeleteConversation}
         />
       </aside>
-      <main className="flex min-w-0 flex-1 flex-col gap-4 p-6">
-        <BackendStatus />
-        <div role="tablist" aria-label="Main view" className="flex gap-1 border-b border-gray-200">
-          {TABS.map(({ id, label }) => (
-            <button
-              key={id}
-              id={`tab-${id}`}
-              type="button"
-              role="tab"
-              aria-selected={tab === id}
-              aria-controls={`panel-${id}`}
-              onClick={() => setTab(id)}
-              className={`-mb-px border-b-2 px-4 py-2 ${
-                tab === id ? "border-blue-700 font-semibold text-blue-700" : "border-transparent text-gray-600"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 p-4 md:p-6">
+        {/* For heading navigation in screen readers; the tabs already show it visually. */}
+        <h2 className="sr-only">{tab === "chat" ? "Chat" : "Study"}</h2>
+        <BackendStatus onBackOnline={handleBackOnline} />
+        <Tabs label="Main view" tabs={TABS} selected={tab} onSelect={setTab} idPrefix="main" />
 
         {/* Both panels stay mounted and the inactive one is hidden: unmounting would
             drop an answer still loading in the chat, or a quiz in progress. */}
         <section
-          id="panel-chat"
+          id={tabPanelId("main", "chat")}
           role="tabpanel"
-          aria-labelledby="tab-chat"
+          aria-labelledby={tabId("main", "chat")}
           hidden={tab !== "chat"}
           className="flex min-h-0 flex-1 flex-col gap-4"
         >
@@ -214,18 +258,23 @@ export default function App() {
             conversationId={conversationId}
             initialMessages={initialMessages}
             existingDocumentIds={existingDocumentIds}
+            noDocuments={noDocuments}
             onConversationStarted={handleConversationStarted}
             onNewChat={handleNewChat}
           />
         </section>
         <section
-          id="panel-study"
+          id={tabPanelId("main", "study")}
           role="tabpanel"
-          aria-labelledby="tab-study"
+          aria-labelledby={tabId("main", "study")}
           hidden={tab !== "study"}
           className="min-h-0 flex-1 overflow-y-auto"
         >
-          <StudyView documentIds={selectedIds} documentCount={documents?.length ?? 0} />
+          <StudyView
+            documentIds={selectedIds}
+            documentCount={documents?.length ?? 0}
+            noDocuments={noDocuments}
+          />
         </section>
       </main>
     </div>

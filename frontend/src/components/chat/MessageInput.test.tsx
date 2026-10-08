@@ -6,9 +6,25 @@ import { describe, expect, it, vi } from "vitest";
 import { MessageInput } from "./MessageInput";
 
 /** MessageInput is controlled, so tests wrap it with real state, like ChatView does. */
-function Harness({ onSend, disabled = false }: { onSend: (q: string) => void; disabled?: boolean }) {
+function Harness({
+  onSend,
+  sending = false,
+  disabled = false,
+}: {
+  onSend: (q: string) => void;
+  sending?: boolean;
+  disabled?: boolean;
+}) {
   const [value, setValue] = useState("");
-  return <MessageInput value={value} onChange={setValue} onSend={onSend} disabled={disabled} />;
+  return (
+    <MessageInput
+      value={value}
+      onChange={setValue}
+      onSend={onSend}
+      sending={sending}
+      disabled={disabled}
+    />
+  );
 }
 
 describe("MessageInput", () => {
@@ -52,7 +68,20 @@ describe("MessageInput", () => {
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
   });
 
-  it("is disabled while waiting for an answer", () => {
+  it("stays editable while waiting for an answer, but does not send", async () => {
+    const onSend = vi.fn();
+    render(<Harness onSend={onSend} sending />);
+    const box = screen.getByLabelText("Your question");
+
+    await userEvent.type(box, "Next question{Enter}");
+
+    expect(box).toBeEnabled();
+    expect(box).toHaveValue("Next question");
+    expect(onSend).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+  });
+
+  it("can be fully disabled", () => {
     render(<Harness onSend={vi.fn()} disabled />);
 
     expect(screen.getByLabelText("Your question")).toBeDisabled();

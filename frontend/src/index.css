@@ -1,1 +1,11 @@
 @import "tailwindcss";
+
+/*
+ * One clear focus outline for every button, link and input. :focus-visible
+ * shows it for keyboard use but not after a mouse click, so it never gets in
+ * the way of mouse users.
+ */
+:focus-visible {
+  outline: 2px solid var(--color-blue-700);
+  outline-offset: 2px;
+}

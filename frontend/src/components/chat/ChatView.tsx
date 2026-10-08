@@ -15,6 +15,8 @@ interface ChatViewProps {
   initialMessages?: ChatMessage[];
   /** Ids of documents that still exist; see SourceDetails. */
   existingDocumentIds?: Set<string>;
+  /** True when no PDF is uploaded yet: there is nothing to ask about. */
+  noDocuments?: boolean;
   /** Called once, with the id the backend gave the new conversation. */
   onConversationStarted: (id: string) => void;
   onNewChat: () => void;
@@ -39,6 +41,7 @@ export function ChatView({
   conversationId,
   initialMessages = [],
   existingDocumentIds,
+  noDocuments = false,
   onConversationStarted,
   onNewChat,
 }: ChatViewProps) {
@@ -46,6 +49,9 @@ export function ChatView({
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState<FailedSend | null>(null);
+  // Read by screen readers (aria-live) when an answer arrives.
+  const [announcement, setAnnouncement] = useState("");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   // Ids for React keys; a ref because changing it shouldn't re-render. New ids
   // start above the saved messages' database ids, so keys never collide.
   const nextId = useRef(Math.max(0, ...initialMessages.map((m) => m.id)) + 1);
@@ -66,7 +72,11 @@ export function ChatView({
     setMessages((previous) => [...previous, userMessage]);
     setDraft("");
     setFailed(null);
+    setAnnouncement("");
     setPending(true);
+    // Send is a click on a button that now becomes disabled, and Retry's notice
+    // disappears: both would drop keyboard focus, so keep it in the question box.
+    inputRef.current?.focus();
 
     let reply: ChatResponse;
     try {
@@ -76,7 +86,9 @@ export function ChatView({
         return;
       }
       setMessages((previous) => previous.filter((m) => m.id !== userMessage.id));
-      setDraft(question);
+      // Put the question back, unless the user already typed a new one while
+      // waiting; Retry still re-sends the failed question either way.
+      setDraft((current) => (current.trim() ? current : question));
       const error = err instanceof ApiError ? err : new ApiError(0, "Something went wrong.");
       setFailed({ id: nextId.current++, error, question });
       setPending(false);
@@ -91,6 +103,7 @@ export function ChatView({
     }
     setMessages((previous) => [...previous, toAssistantMessage(nextId.current++, reply)]);
     setPending(false);
+    setAnnouncement(reply.found ? "Answer received." : "Not found in your material.");
     if (conversationId === null) {
       onConversationStarted(reply.conversation_id);
     }
@@ -100,7 +113,11 @@ export function ChatView({
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="min-h-0 flex-1 overflow-y-auto">
         {messages.length === 0 && !pending ? (
-          <p className="text-gray-600">Ask a question about your documents.</p>
+          <p className="text-gray-600">
+            {noDocuments
+              ? "Upload a PDF in the sidebar to start."
+              : "Ask a question about your documents."}
+          </p>
         ) : (
           <MessageList
             messages={messages}
@@ -117,7 +134,18 @@ export function ChatView({
           onNewChat={onNewChat}
         />
       )}
-      <MessageInput value={draft} onChange={setDraft} onSend={(q) => void send(q)} disabled={pending} />
+      <MessageInput
+        value={draft}
+        onChange={setDraft}
+        onSend={(q) => void send(q)}
+        sending={pending}
+        disabled={noDocuments}
+        inputRef={inputRef}
+      />
+      {/* Visually hidden; screen readers announce it when the text changes. */}
+      <p aria-live="polite" className="sr-only">
+        {announcement}
+      </p>
     </div>
   );
 }

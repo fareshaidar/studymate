@@ -62,7 +62,9 @@ describe("ChatView", () => {
 
     expect(screen.getByText("What is mitosis?")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("StudyMate is thinking…");
-    expect(screen.getByLabelText("Your question")).toBeDisabled();
+    // Editable while waiting (keeps focus), but nothing can be sent.
+    expect(screen.getByLabelText("Your question")).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
     expect(sendChat).toHaveBeenCalledWith({
       question: "What is mitosis?",
       documentIds: ["d1"],
@@ -73,7 +75,45 @@ describe("ChatView", () => {
 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Source 1: biology.pdf, page 4" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Your question")).toBeEnabled();
+    expect(screen.getByText("Answer received.")).toBeInTheDocument(); // the hidden live region
+  });
+
+  it("keeps focus in the box when sending with the Send button", async () => {
+    vi.mocked(sendChat).mockResolvedValue(reply());
+    render(<Harness />);
+
+    await userEvent.type(screen.getByLabelText("Your question"), "What is mitosis?");
+    await userEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(screen.getByLabelText("Your question")).toHaveFocus();
+  });
+
+  it("does not overwrite a question typed while waiting when the request fails", async () => {
+    let fail: (error: unknown) => void = () => {};
+    vi.mocked(sendChat).mockReturnValue(new Promise((_resolve, reject) => (fail = reject)));
+    render(<Harness />);
+
+    await ask("What is mitosis?");
+    await userEvent.type(screen.getByLabelText("Your question"), "And meiosis?");
+    await act(async () => fail(new ApiError(502, "The AI service failed.")));
+
+    expect(screen.getByLabelText("Your question")).toHaveValue("And meiosis?");
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
+  it("asks for an upload first when there are no documents", () => {
+    render(
+      <ChatView
+        documentIds={[]}
+        conversationId={null}
+        noDocuments
+        onConversationStarted={vi.fn()}
+        onNewChat={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Upload a PDF in the sidebar to start.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Your question")).toBeDisabled();
   });
 
   it("sends the conversation id with a follow-up", async () => {

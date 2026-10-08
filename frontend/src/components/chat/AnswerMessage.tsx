@@ -1,4 +1,4 @@
-import { useId, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 
 import type { Source } from "../../api/types";
 import { parseAnswer } from "../../lib/citations";
@@ -31,6 +31,17 @@ export function AnswerMessage({
   const [openN, setOpenN] = useState<number | null>(null);
   // Unique per message, so several answers on one page never share an id.
   const cardId = useId();
+  const cardRef = useRef<HTMLDivElement>(null);
+  // The chip that opened the card: the same [n] can appear more than once,
+  // so focus must go back to the one the user actually pressed.
+  const opener = useRef<HTMLButtonElement | null>(null);
+
+  // Move keyboard and screen-reader focus into the card when it opens.
+  useEffect(() => {
+    if (openN !== null) {
+      cardRef.current?.focus();
+    }
+  }, [openN]);
 
   if (!found) {
     return <NotFoundNotice reason={reason} />;
@@ -39,9 +50,23 @@ export function AnswerMessage({
   const segments = parseAnswer(answer, sources);
   const openSource = sources.find((source) => source.n === openN);
 
+  function closeCard(): void {
+    setOpenN(null);
+    opener.current?.focus();
+  }
+
+  function toggleCard(n: number, chip: HTMLButtonElement): void {
+    if (openN === n) {
+      closeCard(); // clicking the open chip again closes its card
+      return;
+    }
+    opener.current = chip;
+    setOpenN(n);
+  }
+
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
     if (event.key === "Escape" && openN !== null) {
-      setOpenN(null);
+      closeCard();
     }
   }
 
@@ -58,8 +83,7 @@ export function AnswerMessage({
               source={segment.source}
               expanded={openN === segment.source.n}
               cardId={cardId}
-              // Clicking the open chip again closes its card.
-              onClick={() => setOpenN(openN === segment.source.n ? null : segment.source.n)}
+              onClick={(chip) => toggleCard(segment.source.n, chip)}
             />
           ),
         )}
@@ -67,9 +91,12 @@ export function AnswerMessage({
 
       {openSource && (
         <div
+          ref={cardRef}
           id={cardId}
           role="region"
           aria-label={`Source ${openSource.n}`}
+          // -1: focusable by code (above) but not an extra stop in the Tab order.
+          tabIndex={-1}
           className="mt-2 rounded border border-blue-200 bg-blue-50 p-2"
         >
           <div className="flex items-start justify-between gap-2">
@@ -78,7 +105,7 @@ export function AnswerMessage({
               type="button"
               aria-label="Close source"
               className="text-gray-500 hover:text-gray-900"
-              onClick={() => setOpenN(null)}
+              onClick={closeCard}
             >
               ×
             </button>

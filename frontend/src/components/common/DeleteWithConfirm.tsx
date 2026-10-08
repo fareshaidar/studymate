@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { errorMessage } from "../../api/client";
 
@@ -22,6 +22,20 @@ export function DeleteWithConfirm({ name, onDelete, children }: DeleteWithConfir
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const deleteButton = useRef<HTMLButtonElement>(null);
+  const confirmButton = useRef<HTMLButtonElement>(null);
+  const wasConfirming = useRef(false);
+
+  // Keyboard users: the Delete button disappears when the confirm opens, so
+  // focus moves to the confirm button, and back to Delete when it closes.
+  useEffect(() => {
+    if (confirming) {
+      confirmButton.current?.focus();
+    } else if (wasConfirming.current) {
+      deleteButton.current?.focus();
+    }
+    wasConfirming.current = confirming;
+  }, [confirming]);
 
   async function confirmDelete(): Promise<void> {
     setDeleting(true);
@@ -42,6 +56,7 @@ export function DeleteWithConfirm({ name, onDelete, children }: DeleteWithConfir
         <div className="min-w-0 flex-1">{children}</div>
         {!confirming && (
           <button
+            ref={deleteButton}
             type="button"
             aria-label={`Delete ${name}`}
             className="text-gray-500 hover:text-red-700"
@@ -56,6 +71,7 @@ export function DeleteWithConfirm({ name, onDelete, children }: DeleteWithConfir
         <div className="mt-2 flex items-center gap-2">
           <span className="min-w-0 flex-1 truncate">Delete {name}?</span>
           <button
+            ref={confirmButton}
             type="button"
             className="rounded bg-red-700 px-2 py-1 text-white disabled:opacity-50"
             disabled={deleting}

@@ -17,10 +17,12 @@ interface StudyViewProps {
   documentIds: string[];
   /** How many documents exist, for the scope line. */
   documentCount: number;
+  /** True when no PDF is uploaded yet: the tools are disabled with a hint. */
+  noDocuments?: boolean;
 }
 
 /** The study tools. All three panels stay mounted, so a result survives switching tools. */
-export function StudyView({ documentIds, documentCount }: StudyViewProps) {
+export function StudyView({ documentIds, documentCount, noDocuments = false }: StudyViewProps) {
   const [tool, setTool] = useState<Tool>("summary");
 
   const scope =
@@ -44,16 +46,19 @@ export function StudyView({ documentIds, documentCount }: StudyViewProps) {
             {label}
           </button>
         ))}
-        <span className="text-xs text-gray-600">{scope} (change it with the ticks in the sidebar)</span>
+        {!noDocuments && (
+          <span className="text-xs text-gray-600">{scope} (change it with the ticks in the sidebar)</span>
+        )}
       </div>
+      {noDocuments && <p className="text-gray-600">Upload a PDF in the sidebar to use the study tools.</p>}
       <div hidden={tool !== "summary"}>
-        <SummaryPanel documentIds={documentIds} />
+        <SummaryPanel documentIds={documentIds} disabled={noDocuments} />
       </div>
       <div hidden={tool !== "quiz"}>
-        <QuizPanel documentIds={documentIds} />
+        <QuizPanel documentIds={documentIds} disabled={noDocuments} />
       </div>
       <div hidden={tool !== "flashcards"}>
-        <FlashcardsPanel documentIds={documentIds} />
+        <FlashcardsPanel documentIds={documentIds} disabled={noDocuments} />
       </div>
     </div>
   );

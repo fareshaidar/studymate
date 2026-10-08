@@ -2,6 +2,14 @@ import { useId, useState, type FormEvent } from "react";
 
 import { MAX_TOPIC_CHARS } from "../../api/study";
 
+/** Props shared by the three study panels. */
+export interface StudyPanelProps {
+  /** Ticked documents; empty means "use all documents". */
+  documentIds: string[];
+  /** True when there is nothing to study yet (no PDF uploaded). */
+  disabled?: boolean;
+}
+
 interface StudyFormProps {
   /** The Generate button's text, e.g. "Make quiz". */
   buttonLabel: string;
@@ -10,10 +18,12 @@ interface StudyFormProps {
   onGenerate: (topic: string, count: number) => void;
   /** The "how many" field; left out for the summary, which has no count. */
   count?: { label: string; initial: number; max: number };
+  /** Blocks generating, e.g. when no PDF is uploaded yet. */
+  disabled?: boolean;
 }
 
 /** The settings shared by the study tools: an optional topic and, for quiz and flashcards, a count. */
-export function StudyForm({ buttonLabel, pending, onGenerate, count }: StudyFormProps) {
+export function StudyForm({ buttonLabel, pending, onGenerate, count, disabled = false }: StudyFormProps) {
   const [topic, setTopic] = useState("");
   // Kept as text so the field can be empty while the user types a new number.
   const [countText, setCountText] = useState(String(count?.initial ?? 1));
@@ -68,7 +78,7 @@ export function StudyForm({ buttonLabel, pending, onGenerate, count }: StudyForm
       )}
       <button
         type="submit"
-        disabled={pending}
+        disabled={pending || disabled}
         className="rounded-lg bg-blue-700 px-4 py-2 text-white disabled:opacity-50"
       >
         {buttonLabel}

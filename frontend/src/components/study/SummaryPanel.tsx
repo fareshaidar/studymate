@@ -5,10 +5,10 @@ import { formatPageRanges } from "../../lib/pages";
 import { useRequest } from "../../lib/useRequest";
 import { ErrorNotice } from "../common/ErrorNotice";
 import { NotFoundNotice } from "../common/NotFoundNotice";
-import { StudyForm } from "./StudyForm";
+import { StudyForm, type StudyPanelProps } from "./StudyForm";
 
 /** A summary of the ticked documents, optionally focused on one topic. */
-export function SummaryPanel({ documentIds }: { documentIds: string[] }) {
+export function SummaryPanel({ documentIds, disabled = false }: StudyPanelProps) {
   const { result, pending, failure, run, retry } = useRequest<SummaryResponse>();
 
   return (
@@ -16,6 +16,7 @@ export function SummaryPanel({ documentIds }: { documentIds: string[] }) {
       <StudyForm
         buttonLabel="Summarise"
         pending={pending}
+        disabled={disabled}
         onGenerate={(topic) => void run(() => getSummary({ documentIds, topic }))}
       />
       {pending && (

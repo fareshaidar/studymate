@@ -6,10 +6,10 @@ import { useRequest } from "../../lib/useRequest";
 import { ErrorNotice } from "../common/ErrorNotice";
 import { NotFoundNotice } from "../common/NotFoundNotice";
 import { ItemSourceLink } from "./ItemSourceLink";
-import { StudyForm } from "./StudyForm";
+import { StudyForm, type StudyPanelProps } from "./StudyForm";
 
 /** Flashcards from the ticked documents, shown one at a time. */
-export function FlashcardsPanel({ documentIds }: { documentIds: string[] }) {
+export function FlashcardsPanel({ documentIds, disabled = false }: StudyPanelProps) {
   const { result, pending, failure, run, retry } = useRequest<FlashcardsResponse>();
 
   return (
@@ -17,6 +17,7 @@ export function FlashcardsPanel({ documentIds }: { documentIds: string[] }) {
       <StudyForm
         buttonLabel="Make flashcards"
         pending={pending}
+        disabled={disabled}
         count={{ label: "Cards", initial: 10, max: MAX_FLASHCARDS }}
         onGenerate={(topic, numCards) => void run(() => getFlashcards({ documentIds, topic, numCards }))}
       />

@@ -30,8 +30,10 @@ export function MessageList({ messages, pending, existingDocumentIds }: MessageL
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Optional call: jsdom (tests) has no scrollIntoView.
-    endRef.current?.scrollIntoView?.({ behavior: "smooth", block: "end" });
+    // Respect the operating system's "reduce motion" setting: jump instead of animating.
+    // Optional calls: jsdom (tests) has neither matchMedia nor scrollIntoView.
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    endRef.current?.scrollIntoView?.({ behavior: reduceMotion ? "auto" : "smooth", block: "end" });
   }, [messages.length, pending]);
 
   return (

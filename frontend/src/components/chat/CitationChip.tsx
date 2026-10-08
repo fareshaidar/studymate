@@ -6,7 +6,8 @@ interface CitationChipProps {
   expanded: boolean;
   /** The id of the card element, so screen readers know what the button controls. */
   cardId: string;
-  onClick: () => void;
+  /** Receives the chip itself, so focus can return to it when the card closes. */
+  onClick: (chip: HTMLButtonElement) => void;
 }
 
 /** A citation like [2] inside an answer, as a button that opens its source card. */
@@ -17,7 +18,7 @@ export function CitationChip({ source, expanded, cardId, onClick }: CitationChip
       aria-label={`Source ${source.n}: ${source.filename}, page ${source.page}`}
       aria-expanded={expanded}
       aria-controls={expanded ? cardId : undefined}
-      onClick={onClick}
+      onClick={(event) => onClick(event.currentTarget)}
       className={`mx-0.5 rounded px-1 align-baseline text-xs font-medium ${
         expanded ? "bg-blue-700 text-white" : "bg-blue-100 text-blue-800 hover:bg-blue-200"
       }`}
