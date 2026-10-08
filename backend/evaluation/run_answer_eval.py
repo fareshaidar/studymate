@@ -16,13 +16,15 @@ import argparse
 import json
 import sys
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 
 from app.llm.base import LLMClient
-from app.rag.prompts import HistoryMessage
+from app.config import settings
+from app.rag.prompts import HistoryMessage, build_prompt
 from app.rag.structured import generate_json
 from app.services.chat import ChatResult, answer_question, retrieve
 from evaluation.dataset import (
@@ -56,13 +58,14 @@ from evaluation.metrics import (
     citation_metrics,
     faithfulness_metrics,
     hit_at_k,
+    mean,
     rate,
     refusal_metrics,
     rewrite_metrics,
     status_counts,
     usable_pages,
 )
-from evaluation.report import pct, run_header, table
+from evaluation.report import num, pct, run_header, table
 from evaluation.run_retrieval_eval import DEFAULT_OUT, expected_pages, rank
 
 TYPE_ORDER = ("answerable", "follow_up", "unanswerable_off_topic", "unanswerable_on_topic")
@@ -80,12 +83,16 @@ class ItemRecord:
     judge_error: str | None = None  # the judge failed; the answer still counts elsewhere
     rewrite_hit_at_5: bool | None = None
     note: str | None = None  # e.g. why the item was skipped
+    # What the answer call was sent (None when retrieval refused and no call was made):
+    passages: int | None = None
+    prompt_chars: int | None = None  # the user prompt; the fixed system prompt isn't counted
 
 
 @dataclass
 class RunSummary:
     mode: str
     judge_model: str | None
+    top_k: int | None = None  # retrieval_top_k this run used
     records: list[ItemRecord] = field(default_factory=list)
     stopped: str | None = None  # why the run stopped early, if it did
     real_calls: int = 0
@@ -141,6 +148,11 @@ def answer_item(
     case.cited = [(index.dataset_ids[s.document_id], s.page) for s in result.sources if s.cited]
     record.answer = result.answer
     record.rewritten_question = result.rewritten_question
+    if result.passages:
+        # The same build_prompt call answer_question made, so this is the exact size sent.
+        standalone = result.rewritten_question or item.question
+        record.passages = len(result.passages)
+        record.prompt_chars = len(build_prompt(standalone, result.passages, _history(item)))
     try:
         _judge_faithfulness(result, record, judge, sleep)
         if item.type == "follow_up":
@@ -235,7 +247,7 @@ def evaluate(
     sleep: Callable[[float], None] = time.sleep,
 ) -> RunSummary:
     items = round_robin(dataset.items)[:limit]
-    summary = RunSummary(mode=mode, judge_model=judge_model)
+    summary = RunSummary(mode=mode, judge_model=judge_model, top_k=settings.retrieval_top_k)
     for item in items:
         if summary.stopped:
             case = AnswerCase(item.id, item.type, status="skipped", expected=expected_pages(item))
@@ -300,6 +312,16 @@ def _retrieval_layer_table(cases: Sequence[AnswerCase]) -> list[str]:
             rows.append([question_type, len(of_type), pct(refused)])
     lines += table(["Type", "n", "refused by retrieval (the rest would reach the LLM)"], rows)
     return lines
+
+
+def _prompt_size_row(label: str, records: Sequence[ItemRecord]) -> list[object]:
+    sent = [r for r in records if r.prompt_chars is not None]
+    return [
+        label,
+        len(sent),
+        num(mean(r.passages for r in sent), 1),
+        num(mean(r.prompt_chars for r in sent), 0),
+    ]
 
 
 def _subset_rows(label: str, cases: Sequence[AnswerCase]) -> list[object]:
@@ -428,6 +450,24 @@ def render(summary: RunSummary, dataset: EvalDataset) -> str:
             _subset_rows("held-out (owner-written)", held_out),
         ],
     )
+
+    # Last, after the held-out section: it has a row for each set.
+    held_out_records = [r for r in summary.records if r.case.item_id in held_out_ids]
+    lines += [
+        "## What the model was sent",
+        "",
+        f"retrieval_top_k for this run: {summary.top_k}. Per answer call (items refused by "
+        "retrieval make no call); prompt size is the user prompt in characters, without the "
+        "fixed system prompt.",
+        "",
+    ]
+    lines += table(
+        ["Questions", "answer calls", "mean passages", "mean prompt characters"],
+        [
+            _prompt_size_row("tuning set", tuning_records),
+            _prompt_size_row("held-out (owner-written)", held_out_records),
+        ],
+    )
     return "\n".join(lines)
 
 
@@ -440,6 +480,22 @@ def to_json(summary: RunSummary) -> str:
     return json.dumps(asdict(summary), default=default, indent=1, ensure_ascii=False)
 
 
+@contextmanager
+def top_k_override(top_k: int | None) -> Iterator[int]:
+    """Use another retrieval_top_k for this evaluation run only.
+
+    It changes the settings object of this one process (retrieve() reads it at call time)
+    and always restores it; the app's default in app/config.py is never touched.
+    """
+    original = settings.retrieval_top_k
+    if top_k is not None:
+        settings.retrieval_top_k = top_k
+    try:
+        yield settings.retrieval_top_k
+    finally:
+        settings.retrieval_top_k = original
+
+
 def main(argv: list[str] | None = None, *, sleep: Callable[[float], None] = time.sleep) -> int:
     parser = argparse.ArgumentParser(description="Answer evaluation (uses the LLM).")
     parser.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
@@ -450,6 +506,12 @@ def main(argv: list[str] | None = None, *, sleep: Callable[[float], None] = time
     parser.add_argument("--max-calls", type=int, default=100, help="real LLM calls, judge included")
     parser.add_argument("--min-interval", type=float, default=1.0, help="seconds between calls")
     parser.add_argument("--judge-model", default=None, help="another Gemini model for the judge")
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=None,
+        help="retrieval_top_k for this run only (default: the app setting); tags the file names",
+    )
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--fake-llm", action="store_true", help="scripted fake LLM, no API key")
     modes.add_argument("--no-llm", action="store_true", help="retrieval-layer refusals only")
@@ -466,23 +528,28 @@ def main(argv: list[str] | None = None, *, sleep: Callable[[float], None] = time
         max_calls=args.max_calls,
         min_interval=args.min_interval,
     )
-    with temporary_index(dataset, args.documents) as index:
-        summary = evaluate(
-            dataset,
-            index,
-            mode=mode,
-            answerer=answerer,
-            judge=judge,
-            limit=args.limit,
-            judge_model=args.judge_model,
-            sleep=sleep,
-        )
+    # An override gets its own file names, so it never overwrites the baseline files.
+    tag = "" if args.top_k is None else f"-topk{args.top_k}"
+    with top_k_override(args.top_k):
+        with temporary_index(dataset, args.documents) as index:
+            summary = evaluate(
+                dataset,
+                index,
+                mode=mode,
+                answerer=answerer,
+                judge=judge,
+                limit=args.limit,
+                judge_model=args.judge_model,
+                sleep=sleep,
+            )
+        # Rendered inside the override, so the report's settings table shows the value used.
+        text = render(summary, dataset)
 
     out.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    (out / f"answers-{mode}-{stamp}.json").write_text(to_json(summary), encoding="utf-8")
-    report = out / f"answer-report{'' if mode == 'real' else '-' + mode}.md"
-    report.write_text(render(summary, dataset), encoding="utf-8")
+    (out / f"answers-{mode}{tag}-{stamp}.json").write_text(to_json(summary), encoding="utf-8")
+    report = out / f"answer-report{'' if mode == 'real' else '-' + mode}{tag}.md"
+    report.write_text(text, encoding="utf-8")
     print(f"Report: {report}")
     if summary.stopped:
         print(f"Stopped early: {summary.stopped}")

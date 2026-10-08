@@ -7,9 +7,10 @@ from app.config import settings
 from app.llm.errors import ProviderError
 from evaluation.dataset import EvalItem
 from evaluation.harness import CachedLLM, RunState, build_index, make_llms
+from app.rag.prompts import SYSTEM_PROMPT
 from evaluation.judge_prompts import FAITHFULNESS_SYSTEM_PROMPT
 from evaluation.metrics import citation_metrics, refusal_metrics
-from evaluation.run_answer_eval import evaluate, main, render, round_robin
+from evaluation.run_answer_eval import evaluate, main, render, round_robin, top_k_override
 from tests.fakes import FakeLLMClient
 from tests.test_eval_retrieval import args, tiny_dataset
 
@@ -203,3 +204,53 @@ def test_held_out_items_never_change_the_tuning_tables(setup):
         return report[report.index("## Refusals") : report.index("## Held-out set")]
 
     assert tuning_section(dataset) == tuning_section(without_held_out)
+
+
+# --- top_k override and what the model was sent ---
+
+
+def test_top_k_override_applies_to_the_run_only_and_tags_the_files(tmp_path, setup):
+    default = settings.retrieval_top_k
+    out = tmp_path / "results"
+
+    main(args(tmp_path, out) + ["--fake-llm", "--top-k", "2"], **NO_SLEEP)
+
+    assert settings.retrieval_top_k == default  # restored after the run
+    (json_file,) = out.glob("answers-fake-topk2-*.json")
+    assert not (out / "answer-report-fake.md").exists()  # the untagged report isn't touched
+    report = (out / "answer-report-fake-topk2.md").read_text(encoding="utf-8")
+    assert "| retrieval_top_k | 2 |" in report and "retrieval_top_k for this run: 2" in report
+    data = json.loads(json_file.read_text(encoding="utf-8"))
+    assert data["top_k"] == 2
+    sent = [r["passages"] for r in data["records"] if r["passages"] is not None]
+    assert sent and max(sent) == 2  # 3 chunks pass the threshold; the override caps them at 2
+
+
+def test_top_k_override_is_restored_after_an_error():
+    default = settings.retrieval_top_k
+
+    with pytest.raises(RuntimeError):
+        with top_k_override(default + 3):
+            assert settings.retrieval_top_k == default + 3
+            raise RuntimeError("run failed")
+
+    assert settings.retrieval_top_k == default
+
+
+def test_prompt_size_is_exactly_what_the_model_received(setup):
+    dataset, index = setup
+    state = RunState.load(100)
+    answer_llm = FakeLLMClient(reply="Mutation adds variety [1].")
+    judge = client(FakeLLMClient(reply=VALID_VERDICT), state)
+
+    summary = evaluate(
+        dataset, index, mode="real", answerer=client(answer_llm, state), judge=judge, limit=1,
+        **NO_SLEEP,
+    )
+
+    (record,) = summary.records
+    ((prompt, system),) = answer_llm.calls
+    assert system == SYSTEM_PROMPT
+    assert record.prompt_chars == len(prompt)
+    assert record.passages == prompt.count("<<<")  # one delimiter per passage
+    assert summary.top_k == settings.retrieval_top_k
