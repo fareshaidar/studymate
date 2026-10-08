@@ -16,7 +16,7 @@ from app.rag.prompts import (
     build_prompt,
     is_not_found_answer,
 )
-from app.rag.text_quality import alnum_ratio, strip_diagram_chars
+from app.rag.text_quality import alnum_ratio, shorten, strip_diagram_chars
 from app.rag.vectorstore import SearchResult, VectorStore
 
 logger = logging.getLogger(__name__)
@@ -146,15 +146,7 @@ def _source(chunk: PromptChunk, result: SearchResult, cited: bool) -> Source:
         document_id=result.document_id,
         filename=chunk.filename,
         page=chunk.page,
-        snippet=_snippet(chunk.text),
+        snippet=shorten(chunk.text, SNIPPET_CHARS),
         score=round(result.score, 3),
         cited=cited,
     )
-
-
-def _snippet(text: str) -> str:
-    """The start of the chunk, cut at a word boundary."""
-    if len(text) <= SNIPPET_CHARS:
-        return text
-    cut = text[:SNIPPET_CHARS].rsplit(" ", 1)[0]
-    return cut + "…"

@@ -20,3 +20,11 @@ def alnum_ratio(text: str) -> float:
 def strip_diagram_chars(text: str) -> str:
     """Remove box-drawing and arrow characters, keeping the words between them."""
     return _SPACES.sub(" ", _DIAGRAM_CHARS.sub(" ", text)).strip()
+
+
+def shorten(text: str, max_chars: int) -> str:
+    """The start of `text`, cut at a word boundary with "…" added if it was too long."""
+    if len(text) <= max_chars:
+        return text
+    cut = text[:max_chars].rsplit(" ", 1)[0]
+    return cut + "…"

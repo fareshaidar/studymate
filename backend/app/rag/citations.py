@@ -39,3 +39,10 @@ def check_citations(answer: str, n_sources: int) -> CitationResult:
         logger.warning("Removed invalid citations %s (only %d sources)", result.removed, n_sources)
     result.text = text
     return result
+
+
+def strip_citations(text: str) -> str:
+    """Remove every [n] citation, e.g. from an old answer whose sources are no longer shown."""
+    text = _CITATION.sub("", text)
+    text = _SPACE_BEFORE_PUNCT.sub(r"\1", text)
+    return _DOUBLE_SPACES.sub(" ", text).strip()

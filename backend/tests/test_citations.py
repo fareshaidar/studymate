@@ -1,4 +1,4 @@
-from app.rag.citations import check_citations
+from app.rag.citations import check_citations, strip_citations
 
 
 def test_valid_citations_are_kept():
@@ -44,3 +44,9 @@ def test_answer_without_citations_is_unchanged():
 def test_newlines_are_preserved():
     result = check_citations("- Point one [1]\n- Point two [4]", 2)
     assert result.text == "- Point one [1]\n- Point two"
+
+
+def test_strip_citations_removes_all_and_tidies_spaces():
+    assert strip_citations("Selection [1] keeps the best [2][3]. Groups [1, 4] too.") == (
+        "Selection keeps the best. Groups too."
+    )
