@@ -41,6 +41,9 @@ question ─► VectorStore.search(k=retrieval_top_k, document_ids)
 - how often a real answer is wrongly reported as not found;
 - how many uncited sources come back with each answer.
 
+**Update:** measured in Phase 7 (see [phase-7-evaluation.md](phase-7-evaluation.md));
+`retrieval_top_k` became 8 in Phase 9. `min_similarity` is still 0.55.
+
 ## Design decisions
 
 - **Not-found check before the LLM.** Retrieval scores are already computed, so a cheap threshold check saves an LLM call (and free-tier quota) on off-topic questions. It also removes the chance of the model inventing an answer from irrelevant passages.

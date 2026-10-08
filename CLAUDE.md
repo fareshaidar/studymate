@@ -29,8 +29,8 @@ React + Vite + TypeScript + Tailwind, a Vite dev proxy that strips /api instead 
 CORS, GET /documents/{id}/file for "Open PDF at page n", per-conversation document
 selection in localStorage, chat, conversations, study tools; Vitest + Testing
 Library tests with a mocked API; run with npm run dev, npm test, npm run typecheck).
-Setting defaults are unchanged; candidate changes (min_similarity 0.60, top_k 8,
-front-matter filter) await my decision.
+retrieval_top_k is 8 since Phase 9 (was 5); the other candidate changes
+(min_similarity 0.60, front-matter filter) await my decision.
 Evaluation PDFs are git-ignored; never commit them or backend/evaluation/results/.
 Notes are in docs/phase-notes/.
 Next: Phase 9 (hardening).

@@ -31,8 +31,11 @@ class Settings(BaseSettings):
     
     # Below this similarity, a question is treated as "not in the documents".
     min_similarity: float = 0.55
-    # How many chunks to retrieve per question (before the similarity filter).
-    retrieval_top_k: int = 5
+    # Most passages an answer is built from. retrieve() searches 2 x this many
+    # chunks, drops those below min_similarity or unusable, and keeps the best
+    # top_k. 8 since Phase 9: at 5, answer passages ranked 7th-8th were cut off
+    # (see docs/phase-notes/phase-7-evaluation.md, "top_k 8 experiment").
+    retrieval_top_k: int = 8
     # Chunks where fewer than this share of characters are letters/digits
     # (e.g. text diagrams drawn with box characters) are not used as sources.
     min_alnum_ratio: float = 0.5

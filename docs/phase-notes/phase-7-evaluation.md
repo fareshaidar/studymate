@@ -83,7 +83,7 @@ Use `--documents DIR` if the PDFs live elsewhere. The baseline reports are copie
 `docs/evaluation/`: `retrieval-baseline.md` and `answer-baseline.md`, both from commit
 `2aafa58`. Neither contains any PDF text: they share no 6-word run with the extracted PDFs.
 
-## Baseline results (current settings: min_similarity 0.55, top_k 5, 1800/250 chunks)
+## Baseline results (settings at the time: min_similarity 0.55, top_k 5, 1800/250 chunks)
 
 ### Retrieval
 Answerable questions plus follow-ups; follow-ups are searched as their expected standalone question.
@@ -161,6 +161,9 @@ Answerable questions plus follow-ups; follow-ups are searched as their expected 
 - **`retrieval_top_k` 8:** an expected page is kept for 3 more tuning questions (37/39), for
   about 60% more prompt text. A full answer run with this value is described in
   "top_k 8 experiment" below; the default stays at 5.
+
+  **Update (Phase 9):** `retrieval_top_k` 8 is now the default. `min_similarity` 0.60 and the
+  front-matter filter are still not applied.
 - **Front-matter filtering:** a check for tables of contents and lists of figures. Raising
   `min_alnum_ratio` to 0.6 would drop the table of contents (0.57) but not the list of figures
   (0.77).
@@ -171,6 +174,8 @@ Answerable questions plus follow-ups; follow-ups are searched as their expected 
 
 Run with `run_answer_eval --top-k 8 --max-calls 150`. The option overrides `retrieval_top_k`
 for that evaluation process only. **The app default stays at 5.**
+
+**Update (Phase 9):** the app default is now 8, based on this experiment.
 
 - **Calls:** 89 real calls and 30 cache hits, with no errors and nothing skipped.
 - **Baseline:** the 19:11 run, re-run from the reply cache with `--top-k 5 --max-calls 0` to get

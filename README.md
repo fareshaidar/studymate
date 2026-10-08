@@ -36,43 +36,46 @@ details. Full baseline reports: [retrieval](docs/evaluation/retrieval-baseline.m
 - **Tuning set:** 55 questions, used to choose settings.
 - **Held-out set:** 10 questions by the project owner, never used to choose settings.
 
-Baseline at the current settings (similarity threshold 0.55, top 5 passages, 1800-character
-chunks). Counts are shown because n is small.
+Measured with similarity threshold 0.55 and 1800-character chunks, at top_k 5 (the default
+until Phase 9) and top_k 8 (the default since Phase 9; see the [top_k 8
+experiment](#top_k-8-experiment)). Counts are shown because n is small.
 
-| | Tuning set | Held-out set |
-|---|---|---|
-| Right page ranked first (hit@1) | 24/39 | 3/6 |
-| Right page in the top 5 (hit@5) | 34/39 | 5/6 |
-| Answerable questions wrongly refused | 4/39 | 1/6 |
-| Off-topic questions refused | 8/8 | 2/2 |
-| On-topic questions not in the documents refused | 8/8 | 2/2 |
-| Answers with at least one correct page citation | 34/35 | 5/5 |
-| Claims supported by the cited passages (LLM judge) | 46/46 | 5/5 |
+| | Tuning, top_k 5 | Tuning, top_k 8 | Held-out, top_k 5 | Held-out, top_k 8 |
+|---|---|---|---|---|
+| Right page ranked first (hit@1) | 24/39 | 24/39 | 3/6 | 3/6 |
+| Right page in the top 5 (hit@5) | 34/39 | 34/39 | 5/6 | 5/6 |
+| Answerable questions wrongly refused | 4/39 | 1/39 | 1/6 | 1/6 |
+| Off-topic questions refused | 8/8 | 8/8 | 2/2 | 2/2 |
+| On-topic questions not in the documents refused | 8/8 | 8/8 | 2/2 | 2/2 |
+| Answers with at least one correct page citation | 34/35 | 36/38 | 5/5 | 5/5 |
+| Claims supported by the cited passages (LLM judge) | 46/46 | 53/53 | 5/5 | 5/5 |
 
 The first two rows count answerable questions plus follow-ups, and follow-ups are searched as
-their intended standalone question.
+their intended standalone question. They measure the ranking, which top_k doesn't change, so
+they are the same in both columns. The top_k 8 answer numbers come from the experiment below,
+a full run on all 65 questions.
 
 **Main findings**
 - **Off-topic questions** score low and are mostly stopped by the similarity threshold.
 - **On-topic questions** whose answer isn't in the documents score in the same range as many
   answerable ones (0.61–0.71 vs 0.62–0.81), so no threshold separates them. The model's "not found" rule refused all 10.
-- **All 5 false refusals (4 tuning, 1 held-out) were traced.** In every one, the passage
-  containing the answer was not among the 5 shown to the model, so declining was correct. The
+- **All 5 false refusals at top_k 5 (4 tuning, 1 held-out) were traced.** In every one, the
+  passage containing the answer was not among the 5 shown to the model, so declining was correct. The
   answer passage ranked 7th or 8th in 3 cases and was outside the top 10 in 2. In one case the
   right page was shown, but only its footnotes passage.
 - **Rewriting follow-up questions** raises "right page in the top 5" from 3/8 (as typed) to 7/8.
   This counts pages, not passages: one of the 7 got only an unhelpful passage from the right
   page.
-- **On the tuning set, a threshold of 0.60 and 8 passages look better.** They're not applied
-  yet:
+- **On the tuning set, a threshold of 0.60 and 8 passages look better.** 8 passages became the
+  default in Phase 9; the 0.60 threshold is still not applied:
   - off-topic questions reaching the model would drop from 5/8 to 1/8;
   - the right page would be kept for 37/39 instead of 34/39;
   - 8 passages would have shown the answer passage for 3 of the 4 tuning false refusals.
 
 ### top_k 8 experiment
 
-A full answer run with 8 passages instead of 5, set for that evaluation run only. **The app
-default stays at 5.**
+A full answer run with 8 passages instead of 5, set for that evaluation run only. The default
+was 5 when this was run; **Phase 9 made 8 the default**, based on this experiment.
 
 | | Tuning (n=55) top 5 | Tuning top 8 | Held-out (n=10) top 5 | Held-out top 8 |
 |---|---|---|---|---|

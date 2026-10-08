@@ -149,9 +149,11 @@ Browser ── /api/... ──> Vite dev server (5173) ── strips /api ──
   - **Example:** the Skylab drinking-water question (`sky-04`, page 30), which the owner also hit
     in the live app. Its answer passage ranks 8th, and OCR front matter (table of contents, list
     of figures) took 2 of the 5 slots.
-  - **Candidate fix:** `top_k` 8 recovered the 3 tuning-set refusals whose answer passages ranked
-    7th–8th, with no unanswerable question answered, at about 51–56% more prompt text per answer.
-  - **Not applied:** the held-out set can't confirm it, and the owner has not decided. See the
+  - **Fixed in Phase 9 for this case:** `top_k` 8 is now the default. In the experiment it
+    recovered the 3 tuning-set refusals whose answer passages ranked 7th–8th (sky-04, sky-13,
+    fu-06), with no unanswerable question answered, at about 51–56% more prompt text per answer.
+  - **Still refused:** fu-01 and user-06, whose answer passages rank outside the top 10. The
+    held-out set couldn't confirm the change. See the
     [Phase 7 notes](phase-7-evaluation.md#top_k-8-experiment).
 - **A citation card shows the opening of the passage, not the cited sentence.** The snippet is
   the first 200 characters of the passage (`SNIPPET_CHARS`), so the cited fact may be further
