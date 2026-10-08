@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db.models import Document
-from app.rag.text_quality import alnum_ratio, strip_diagram_chars
+from app.rag.text_quality import alnum_ratio, is_front_matter, strip_diagram_chars
 from app.rag.vectorstore import SearchResult, StoredChunk, VectorStore
 
 
@@ -40,8 +40,14 @@ def resolve_documents(session: Session, document_ids: list[str] | None) -> dict[
 
 
 def is_usable(text: str) -> bool:
-    """False for chunks that are mostly symbols (e.g. text diagrams), which are noise for the model."""
-    return alnum_ratio(text) >= settings.min_alnum_ratio
+    """False for chunks that are noise for the model: mostly symbols (e.g. text diagrams),
+    or, when exclude_front_matter is on, a table of contents or list of figures.
+
+    Used by chat retrieval, the study tools and the evaluation, so all three agree.
+    """
+    if alnum_ratio(text) < settings.min_alnum_ratio:
+        return False
+    return not (settings.exclude_front_matter and is_front_matter(text))
 
 
 class _HasText(Protocol):

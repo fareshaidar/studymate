@@ -3,12 +3,14 @@ from datetime import datetime, timezone
 import pytest
 from sqlalchemy.orm import sessionmaker
 
+from app.config import settings
 from app.db.database import Base, make_engine
 from app.db.models import Document
 from app.rag.vectorstore import StoredChunk
 from app.services.selection import (
     UnknownDocumentError,
     evenly_spaced,
+    is_usable,
     resolve_documents,
     usable,
 )
@@ -63,6 +65,28 @@ def test_usable_drops_diagrams_and_strips_diagram_chars():
 
     assert [c.chunk_index for c in result] == [1]
     assert result[0].text == "Step one The algorithm stops after twenty stale generations."
+
+
+# Like the real contents pages: real titles and short leaders, so the text is mostly
+# letters and passes the diagram filter; only the front-matter rule can drop it.
+TABLE_OF_CONTENTS = "TABLE OF CONTENTS\n" + "\n".join(
+    f"Section {n}. Water storage and distribution system .... {n * 7}" for n in range(1, 8)
+)
+
+
+def test_front_matter_is_usable_while_the_setting_is_off(monkeypatch):
+    monkeypatch.setattr(settings, "exclude_front_matter", False)
+
+    assert is_usable(TABLE_OF_CONTENTS)
+    assert [c.chunk_index for c in usable([chunk(TABLE_OF_CONTENTS, 0)])] == [0]
+
+
+def test_front_matter_is_dropped_when_the_setting_is_on(monkeypatch):
+    monkeypatch.setattr(settings, "exclude_front_matter", True)
+    body = chunk("The ten tanks held the drinking water for all three crews.", 1)
+
+    assert not is_usable(TABLE_OF_CONTENTS)
+    assert [c.chunk_index for c in usable([chunk(TABLE_OF_CONTENTS, 0), body])] == [1]
 
 
 @pytest.mark.parametrize(
