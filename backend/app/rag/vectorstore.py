@@ -8,6 +8,10 @@ from app.rag.chunker import Chunk
 from app.rag.embedder import embed_documents, embed_query
 
 COLLECTION_NAME = "chunks"
+# Chunks embedded and added per call. Chroma rejects a single add above its maximum
+# batch size (a few thousand), which a very large PDF could reach; batches also keep
+# fewer embeddings in memory at once. A 398-page PDF has about 600 chunks.
+ADD_BATCH_SIZE = 500
 
 
 @dataclass
@@ -44,19 +48,23 @@ class VectorStore:
         )
 
     def add_chunks(self, document_id: str, chunks: list[Chunk]) -> None:
-        """Embed and store the chunks of one document (replacing any old copy)."""
+        """Embed and store the chunks of one document (replacing any old copy).
+
+        Added in batches of ADD_BATCH_SIZE. If a batch fails, the caller (ingest_pdf)
+        deletes the document's chunks again, so no half-added document stays behind.
+        """
         self.delete_document(document_id)
-        if not chunks:
-            return
-        self._collection.add(
-            ids=[f"{document_id}:{c.index}" for c in chunks],
-            embeddings=embed_documents([c.text for c in chunks]),
-            documents=[c.text for c in chunks],
-            metadatas=[
-                {"document_id": document_id, "page": c.page, "chunk_index": c.index}
-                for c in chunks
-            ],
-        )
+        for start in range(0, len(chunks), ADD_BATCH_SIZE):
+            batch = chunks[start : start + ADD_BATCH_SIZE]
+            self._collection.add(
+                ids=[f"{document_id}:{c.index}" for c in batch],
+                embeddings=embed_documents([c.text for c in batch]),
+                documents=[c.text for c in batch],
+                metadatas=[
+                    {"document_id": document_id, "page": c.page, "chunk_index": c.index}
+                    for c in batch
+                ],
+            )
 
     def search(
         self, query: str, k: int = 5, document_ids: list[str] | None = None

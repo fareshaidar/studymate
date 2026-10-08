@@ -1,3 +1,4 @@
+from app.rag import vectorstore
 from app.rag.chunker import Chunk
 from app.rag.vectorstore import VectorStore
 
@@ -78,3 +79,24 @@ def test_get_chunks_returns_one_document_in_reading_order(tmp_path):
 
 def test_get_chunks_of_unknown_document_is_empty(tmp_path):
     assert make_store(tmp_path).get_chunks("nope") == []
+
+
+def test_chunks_are_embedded_and_added_in_batches(tmp_path, monkeypatch):
+    monkeypatch.setattr(vectorstore, "ADD_BATCH_SIZE", 2)
+    batch_sizes = []
+    real_embed = vectorstore.embed_documents
+
+    def counting_embed(texts):
+        batch_sizes.append(len(texts))
+        return real_embed(texts)
+
+    monkeypatch.setattr(vectorstore, "embed_documents", counting_embed)
+    store = make_store(tmp_path)
+    texts = ["Genetic algorithms evolve populations.", "Selection keeps the fittest.",
+             "Mutation adds variety.", "Crossover mixes parents.", "Pizza has cheese."]
+
+    store.add_chunks("doc1", [Chunk(text=t, page=i + 1, index=i) for i, t in enumerate(texts)])
+
+    assert batch_sizes == [2, 2, 1]
+    assert [c.chunk_index for c in store.get_chunks("doc1")] == [0, 1, 2, 3, 4]
+    assert store.search("cheese on pizza", k=1)[0].page == 5

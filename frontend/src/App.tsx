@@ -47,6 +47,8 @@ export default function App() {
   const menuButton = useRef<HTMLButtonElement>(null);
   const [documents, setDocuments] = useState<DocumentInfo[] | null>(null);
   const [documentsError, setDocumentsError] = useState<string | null>(null);
+  // From /health; null until known (then only the backend checks the size).
+  const [maxUploadMb, setMaxUploadMb] = useState<number | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[] | null>(null);
   const [conversationsError, setConversationsError] = useState<string | null>(null);
 
@@ -208,6 +210,7 @@ export default function App() {
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
           onDocumentsChanged={refreshDocuments}
+          maxUploadMb={maxUploadMb}
         />
         <ConversationList
           conversations={conversations}
@@ -227,7 +230,10 @@ export default function App() {
       <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 p-4 md:p-6">
         {/* For heading navigation in screen readers; the tabs already show it visually. */}
         <h2 className="sr-only">{tab === "chat" ? "Chat" : "Study"}</h2>
-        <BackendStatus onBackOnline={handleBackOnline} />
+        <BackendStatus
+          onBackOnline={handleBackOnline}
+          onHealth={(health) => setMaxUploadMb(health.max_upload_mb ?? null)}
+        />
         <Tabs label="Main view" tabs={TABS} selected={tab} onSelect={setTab} idPrefix="main" />
 
         {/* Both panels stay mounted and the inactive one is hidden: unmounting would

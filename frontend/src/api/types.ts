@@ -4,6 +4,8 @@ export interface Health {
   status: string;
   /** Whether an LLM API key is set (never the key itself). Missing on older backends. */
   llm_configured?: boolean;
+  /** Largest upload the backend accepts, in MB. Missing on older backends. */
+  max_upload_mb?: number;
 }
 
 /** One uploaded PDF, as returned by GET/POST /documents. */

@@ -88,6 +88,17 @@ describe("BackendStatus", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("passes every health answer on, e.g. for the upload limit", async () => {
+    const answer = { status: "ok", llm_configured: true, max_upload_mb: 50 };
+    vi.mocked(getHealth).mockResolvedValue(answer);
+    const onHealth = vi.fn();
+
+    render(<BackendStatus onHealth={onHealth} />);
+    await settle();
+
+    expect(onHealth).toHaveBeenCalledWith(answer);
+  });
+
   it("raises no key warning when an older backend doesn't send llm_configured", async () => {
     vi.mocked(getHealth).mockResolvedValue({ status: "ok" });
 

@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
+from app.api import documents as documents_api
 from app.api.deps import get_db, get_upload_dir, get_vector_store
 from app.config import settings
 from app.db.database import Base, make_engine
@@ -93,6 +94,45 @@ def test_too_large_upload_is_rejected(tmp_path, env, monkeypatch):
 
     assert response.status_code == 413
     assert list(upload_dir.iterdir()) == []
+
+
+def test_oversized_upload_is_refused_before_it_is_read(tmp_path, env, monkeypatch):
+    client, _, upload_dir = env
+    monkeypatch.setattr(settings, "max_upload_mb", 1)
+
+    def must_not_run(*args, **kwargs):
+        raise AssertionError("the upload endpoint should not have been reached")
+
+    # Refused by the Content-Length middleware: the endpoint never runs.
+    monkeypatch.setattr(documents_api, "ingest_pdf", must_not_run)
+    big = tmp_path / "big.pdf"
+    big.write_bytes(b"%PDF-1.7\n" + b"0" * (3 * 1024 * 1024))  # 3 MB > 1 MB + allowance
+
+    response = upload(client, big)
+
+    assert response.status_code == 413
+    assert response.json()["detail"] == "File is larger than 1 MB."
+    assert list(upload_dir.iterdir()) == []
+
+
+def test_upload_under_the_limit_passes_the_early_check(tmp_path, env, monkeypatch):
+    client, _, _ = env
+    monkeypatch.setattr(settings, "max_upload_mb", 1)
+    pdf = tmp_path / "notes.pdf"
+    make_pdf(pdf, [GA_TEXT])
+
+    assert upload(client, pdf).status_code == 201
+
+
+def test_the_early_check_only_applies_to_uploads(env, monkeypatch):
+    client, _, _ = env
+    monkeypatch.setattr(settings, "max_upload_mb", 0)
+    big_body = b"x" * (2 * 1024 * 1024)  # over 0 MB + allowance
+
+    # Another path with a large body is not answered by the middleware.
+    response = client.post("/documents/abc/file", content=big_body)
+
+    assert response.status_code != 413
 
 
 def test_delete_removes_row_chunks_and_file(tmp_path, env):

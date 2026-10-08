@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getHealth } from "../../api/documents";
+import type { Health } from "../../api/types";
 
 /** How often /health is checked. It never calls the LLM, so this costs no quota. */
 export const HEALTH_CHECK_MS = 30_000;
@@ -8,6 +9,8 @@ export const HEALTH_CHECK_MS = 30_000;
 interface BackendStatusProps {
   /** Called when the backend answers again after being offline, so lists can reload. */
   onBackOnline?: () => void;
+  /** Called with every successful /health answer, e.g. to learn the upload limit. */
+  onHealth?: (health: Health) => void;
 }
 
 /**
@@ -20,7 +23,7 @@ interface BackendStatusProps {
  * It checks when the page opens, every 30 s, when the browser tab regains focus,
  * and when the user clicks "Check now".
  */
-export function BackendStatus({ onBackOnline }: BackendStatusProps) {
+export function BackendStatus({ onBackOnline, onHealth }: BackendStatusProps) {
   const [offline, setOffline] = useState(false);
   const [llmConfigured, setLlmConfigured] = useState(true);
   const [checking, setChecking] = useState(false);
@@ -28,12 +31,15 @@ export function BackendStatus({ onBackOnline }: BackendStatusProps) {
   const wasOffline = useRef(false);
   const onBackOnlineRef = useRef(onBackOnline);
   onBackOnlineRef.current = onBackOnline;
+  const onHealthRef = useRef(onHealth);
+  onHealthRef.current = onHealth;
 
   const check = useCallback(async (): Promise<void> => {
     setChecking(true);
     try {
       const health = await getHealth();
       setLlmConfigured(health.llm_configured !== false);
+      onHealthRef.current?.(health);
       if (wasOffline.current) {
         onBackOnlineRef.current?.();
       }

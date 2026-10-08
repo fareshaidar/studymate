@@ -106,3 +106,18 @@ front-matter flag, so one search per question gives the numbers with the filter 
 - **Daily quota → 429**, with no `Retry-After` and the message "…Please try again tomorrow.",
   for chat and the study tools (shared error handler). The UI offers no Retry on a 429. A
   per-minute limit stays 503 with `Retry-After` and the countdown.
+
+## Step 4: uploads
+
+- **Early size check.** FastAPI reads the whole multipart body before the upload endpoint runs,
+  so the 50 MB byte count only fired after the full file had arrived. A middleware
+  (`api/upload_limit.py`) now answers 413 from the `Content-Length` header first (limit plus
+  1 MB for the multipart wrapping); the byte count stays as the exact check. Live check: a
+  60 MB upload got its 413 in about 2 ms with 0 bytes sent (curl waits for the server's go-ahead
+  before sending a large body).
+- **In the UI,** `/health` reports `max_upload_mb` and the drop zone refuses a larger file before
+  sending it, with the backend's message. With an older backend (no field), only the backend
+  checks.
+- **Batched Chroma adds.** Chunks are embedded and added 500 at a time, below Chroma's maximum
+  batch size, with fewer embeddings in memory at once. A failed batch is cleaned up by
+  `ingest_pdf`, which deletes the document's chunks on any error.

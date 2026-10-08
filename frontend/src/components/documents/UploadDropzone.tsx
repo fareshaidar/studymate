@@ -6,6 +6,8 @@ import { uploadDocument, type UploadProgress } from "../../api/upload";
 interface UploadDropzoneProps {
   /** Called after a successful upload, so the document list can refresh. */
   onUploaded: () => void | Promise<void>;
+  /** Largest upload the backend accepts, in MB; null while unknown (then only the backend checks). */
+  maxUploadMb?: number | null;
 }
 
 /**
@@ -14,7 +16,7 @@ interface UploadDropzoneProps {
  * Shows the bytes sent, then an indexing message while the backend embeds the
  * PDF (the request only finishes after indexing). Errors stay inline.
  */
-export function UploadDropzone({ onUploaded }: UploadDropzoneProps) {
+export function UploadDropzone({ onUploaded, maxUploadMb = null }: UploadDropzoneProps) {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<UploadProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +28,12 @@ export function UploadDropzone({ onUploaded }: UploadDropzoneProps) {
     // backend still validates; this just gives a faster, friendlier message.
     if (!file.name.toLowerCase().endsWith(".pdf")) {
       setError("Only PDF files are supported.");
+      return;
+    }
+    // Refuse a too-large file here, before sending it: otherwise the whole file would
+    // upload first. Same limit and message as the backend, which still checks too.
+    if (maxUploadMb !== null && file.size > maxUploadMb * 1024 * 1024) {
+      setError(`File is larger than ${maxUploadMb} MB.`);
       return;
     }
     setBusy(true);

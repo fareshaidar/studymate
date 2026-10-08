@@ -6,7 +6,7 @@ from app.main import app
 FAKE_KEY = "test-key-not-real-12345"
 
 
-def health(monkeypatch, key: str) -> dict:
+def health(monkeypatch, key: str):
     # settings, not .env: the test never depends on the real backend/.env.
     monkeypatch.setattr(settings, "gemini_api_key", key)
     # No `with`: skips the startup hook, which would touch the real database.
@@ -16,13 +16,22 @@ def health(monkeypatch, key: str) -> dict:
 
 
 def test_health_reports_a_missing_key(monkeypatch):
-    assert health(monkeypatch, "").json() == {"status": "ok", "llm_configured": False}
+    body = health(monkeypatch, "").json()
+
+    assert body["status"] == "ok"
+    assert body["llm_configured"] is False
 
 
 def test_health_reports_a_configured_key_without_revealing_it(monkeypatch):
     response = health(monkeypatch, FAKE_KEY)
 
-    assert response.json() == {"status": "ok", "llm_configured": True}
+    assert response.json()["llm_configured"] is True
     # Not the key, nor any recognisable piece of it.
     assert FAKE_KEY not in response.text
     assert "12345" not in response.text
+
+
+def test_health_reports_the_upload_limit(monkeypatch):
+    monkeypatch.setattr(settings, "max_upload_mb", 7)
+
+    assert health(monkeypatch, "").json()["max_upload_mb"] == 7

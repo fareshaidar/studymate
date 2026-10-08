@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_upload_dir, get_vector_store
+from app.api.upload_limit import too_large_message
 from app.config import settings
 from app.db.models import Document
 from app.rag.vectorstore import VectorStore
@@ -37,10 +38,9 @@ def _save_upload(upload: UploadFile, dest: Path, max_bytes: int) -> None:
         while block := upload.file.read(_COPY_CHUNK):
             written += len(block)
             if written > max_bytes:
-                raise HTTPException(
-                    status.HTTP_413_CONTENT_TOO_LARGE,
-                    f"File is larger than {settings.max_upload_mb} MB.",
-                )
+                # The exact check; upload_limit's middleware already refused most
+                # oversized uploads from their Content-Length, before reading them.
+                raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, too_large_message())
             out.write(block)
 
 

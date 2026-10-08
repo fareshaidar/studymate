@@ -97,6 +97,38 @@ describe("UploadDropzone", () => {
     await upload.resolve();
   });
 
+  it("refuses a file over the backend's limit without uploading it", () => {
+    render(<UploadDropzone onUploaded={vi.fn()} maxUploadMb={1} />);
+    const big = new File([new Uint8Array(1024 * 1024 + 1)], "textbook.pdf", { type: "application/pdf" });
+
+    fireEvent.drop(screen.getByText(/Drop a PDF here/), { dataTransfer: { files: [big] } });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("File is larger than 1 MB.");
+    expect(uploadDocument).not.toHaveBeenCalled();
+  });
+
+  it("uploads a file exactly at the limit", async () => {
+    const upload = controlUpload();
+    render(<UploadDropzone onUploaded={vi.fn()} maxUploadMb={1} />);
+    const exact = new File([new Uint8Array(1024 * 1024)], "notes.pdf", { type: "application/pdf" });
+
+    fireEvent.drop(screen.getByText(/Drop a PDF here/), { dataTransfer: { files: [exact] } });
+
+    expect(uploadDocument).toHaveBeenCalledWith(exact, expect.any(Function));
+    await upload.resolve();
+  });
+
+  it("leaves the size check to the backend while the limit is unknown", async () => {
+    const upload = controlUpload();
+    render(<UploadDropzone onUploaded={vi.fn()} />);
+    const big = new File([new Uint8Array(2 * 1024 * 1024)], "textbook.pdf", { type: "application/pdf" });
+
+    fireEvent.drop(screen.getByText(/Drop a PDF here/), { dataTransfer: { files: [big] } });
+
+    expect(uploadDocument).toHaveBeenCalledTimes(1);
+    await upload.resolve();
+  });
+
   it("rejects a dropped non-PDF without uploading it", () => {
     render(<UploadDropzone onUploaded={vi.fn()} />);
     const txt = new File(["hello"], "notes.txt", { type: "text/plain" });

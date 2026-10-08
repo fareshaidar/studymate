@@ -11,6 +11,8 @@ interface DocumentPanelProps {
   onSelectionChange: (ids: string[]) => void;
   /** Reloads the list after an upload or a delete. */
   onDocumentsChanged: () => Promise<void>;
+  /** Largest upload the backend accepts, in MB; null while unknown. */
+  maxUploadMb?: number | null;
 }
 
 /** The sidebar section for uploading, choosing and deleting documents. */
@@ -20,6 +22,7 @@ export function DocumentPanel({
   selectedIds,
   onSelectionChange,
   onDocumentsChanged,
+  maxUploadMb = null,
 }: DocumentPanelProps) {
   async function handleDelete(id: string): Promise<void> {
     await deleteDocument(id); // errors propagate to the row, which shows them
@@ -29,7 +32,7 @@ export function DocumentPanel({
   return (
     <section className="space-y-3">
       <h2 className="text-lg font-semibold">Documents</h2>
-      <UploadDropzone onUploaded={onDocumentsChanged} />
+      <UploadDropzone onUploaded={onDocumentsChanged} maxUploadMb={maxUploadMb} />
       {listError && (
         <p role="alert" className="text-sm text-red-700">
           Could not load documents: {listError}
