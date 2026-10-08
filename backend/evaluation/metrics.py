@@ -49,8 +49,16 @@ class RankedChunk:
 
     page: PageRef
     score: float
-    usable: bool  # passes the diagram filter (is_usable), like in the chat pipeline
+    usable: bool  # passes the diagram filter (min_alnum_ratio), like in the chat pipeline
     chunk_index: int = 0  # identifies the chunk within its document (for drift checks)
+    # A table of contents or list of figures (rag.text_quality.is_front_matter). Kept as a
+    # separate flag so one search per question gives the numbers with the filter off and on.
+    front_matter: bool = False
+
+
+def allowed(chunk: RankedChunk, drop_front_matter: bool) -> bool:
+    """Could this chunk be shown to the model? Mirrors app.services.selection.is_usable."""
+    return chunk.usable and not (drop_front_matter and chunk.front_matter)
 
 
 @dataclass
@@ -67,9 +75,9 @@ class RetrievalCase:
         return self.type in HAS_ANSWER
 
 
-def usable_pages(ranking: Sequence[RankedChunk]) -> list[PageRef]:
+def usable_pages(ranking: Sequence[RankedChunk], drop_front_matter: bool = False) -> list[PageRef]:
     """The pages of the usable chunks, best first: what the model could ever be shown."""
-    return [c.page for c in ranking if c.usable]
+    return [c.page for c in ranking if allowed(c, drop_front_matter)]
 
 
 def hit_at_k(pages: Sequence[PageRef], expected: set[PageRef], k: int) -> bool:
@@ -104,12 +112,14 @@ class RankingMetrics:
     mrr: float
 
 
-def ranking_metrics(cases: Sequence[RetrievalCase], ks: Sequence[int]) -> RankingMetrics | None:
+def ranking_metrics(
+    cases: Sequence[RetrievalCase], ks: Sequence[int], drop_front_matter: bool = False
+) -> RankingMetrics | None:
     """Hit rate, recall and MRR over the usable ranking, no threshold (pure ranking quality)."""
     cases = [c for c in cases if c.has_answer]
     if not cases:
         return None
-    rankings = [(usable_pages(c.ranking), c.expected) for c in cases]
+    rankings = [(usable_pages(c.ranking, drop_front_matter), c.expected) for c in cases]
     return RankingMetrics(
         n=len(cases),
         hit={k: mean(hit_at_k(p, e, k) for p, e in rankings) for k in ks},
@@ -118,11 +128,15 @@ def ranking_metrics(cases: Sequence[RetrievalCase], ks: Sequence[int]) -> Rankin
     )
 
 
-def kept_chunks(ranking: Sequence[RankedChunk], threshold: float, top_k: int) -> list[RankedChunk]:
+def kept_chunks(
+    ranking: Sequence[RankedChunk], threshold: float, top_k: int, drop_front_matter: bool = False
+) -> list[RankedChunk]:
     """What the chat pipeline would give the model, mirroring app.services.chat.retrieve:
     search 2 * top_k, keep usable chunks scoring at least `threshold`, at most top_k of them.
     """
-    return [c for c in ranking[: top_k * 2] if c.usable and c.score >= threshold][:top_k]
+    return [
+        c for c in ranking[: top_k * 2] if allowed(c, drop_front_matter) and c.score >= threshold
+    ][:top_k]
 
 
 @dataclass
@@ -172,15 +186,28 @@ class CutoffResult:
     false_answers_off_topic: Rate  # off-topic questions that would reach the LLM
     false_answers_on_topic: Rate  # on-topic unanswerable questions that would reach the LLM
     mean_passages: float | None  # passages sent to the LLM when not refused (cost)
+    drop_front_matter: bool = False
+    # Answerable questions only: kept passages that are front matter, of all kept passages,
+    # and questions with at least one such passage. Both are 0 when front matter is dropped.
+    front_matter_slots: Rate = Rate(0, 0)
+    questions_with_front_matter: Rate = Rate(0, 0)
 
 
-def evaluate_cutoff(cases: Sequence[RetrievalCase], threshold: float, top_k: int) -> CutoffResult:
-    kept = {c.item_id: kept_chunks(c.ranking, threshold, top_k) for c in cases}
+def evaluate_cutoff(
+    cases: Sequence[RetrievalCase],
+    threshold: float,
+    top_k: int,
+    drop_front_matter: bool = False,
+) -> CutoffResult:
+    kept = {
+        c.item_id: kept_chunks(c.ranking, threshold, top_k, drop_front_matter) for c in cases
+    }
     answerable = [c for c in cases if c.has_answer]
 
     def false_answers(question_type: str) -> Rate:
         return rate(bool(kept[c.item_id]) for c in cases if c.type == question_type)
 
+    answer_slots = [k for c in answerable for k in kept[c.item_id]]
     return CutoffResult(
         threshold=threshold,
         top_k=top_k,
@@ -189,19 +216,30 @@ def evaluate_cutoff(cases: Sequence[RetrievalCase], threshold: float, top_k: int
         false_answers_off_topic=false_answers("unanswerable_off_topic"),
         false_answers_on_topic=false_answers("unanswerable_on_topic"),
         mean_passages=mean(len(k) for k in kept.values() if k),
+        drop_front_matter=drop_front_matter,
+        front_matter_slots=rate(k.front_matter for k in answer_slots),
+        questions_with_front_matter=rate(
+            any(k.front_matter for k in kept[c.item_id]) for c in answerable
+        ),
     )
 
 
 def threshold_sweep(
-    cases: Sequence[RetrievalCase], thresholds: Sequence[float], top_k: int
+    cases: Sequence[RetrievalCase],
+    thresholds: Sequence[float],
+    top_k: int,
+    drop_front_matter: bool = False,
 ) -> list[CutoffResult]:
-    return [evaluate_cutoff(cases, t, top_k) for t in thresholds]
+    return [evaluate_cutoff(cases, t, top_k, drop_front_matter) for t in thresholds]
 
 
 def top_k_sweep(
-    cases: Sequence[RetrievalCase], threshold: float, top_ks: Sequence[int]
+    cases: Sequence[RetrievalCase],
+    threshold: float,
+    top_ks: Sequence[int],
+    drop_front_matter: bool = False,
 ) -> list[CutoffResult]:
-    return [evaluate_cutoff(cases, threshold, k) for k in top_ks]
+    return [evaluate_cutoff(cases, threshold, k, drop_front_matter) for k in top_ks]
 
 
 @dataclass

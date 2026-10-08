@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+from app.config import settings
 from app.rag.chunker import Chunk
 from app.rag.vectorstore import VectorStore
 from app.services.chat import retrieve
@@ -42,6 +43,36 @@ def test_kept_chunks_and_retrieve_keep_the_same_chunks(tmp_path):
     assert compared > 20
     # And the diagram chunk really is in the rankings, so the usable filter is exercised.
     assert any(not c.usable for c in rank("genetic algorithm diagram", index)[:4])
+
+
+# One entry per line, as on a real contents page (the test PDF helper doesn't wrap lines).
+CONTENTS = "TABLE OF CONTENTS\n" + "\n".join(
+    f"Section {n}. Genetic algorithm selection and mutation .... {n * 3}" for n in range(1, 8)
+)
+
+
+def test_kept_chunks_and_retrieve_agree_with_the_front_matter_filter_on(tmp_path, monkeypatch):
+    """The same drift check with exclude_front_matter on: retrieve() drops front matter
+    through is_usable(), the sweeps through the recorded front_matter flag."""
+    monkeypatch.setattr(settings, "exclude_front_matter", True)
+    store = VectorStore(path=tmp_path / "chroma")
+    texts = [CONTENTS, GA, SELECTION, MUTATION, CROSSOVER, PIZZA]
+    store.add_chunks("app1", [Chunk(text=t, page=i + 1, index=i) for i, t in enumerate(texts)])
+    index = EvalIndex(session=None, store=store, app_ids={"ga": "app1"}, dataset_ids={"app1": "ga"})
+
+    ranking = rank("genetic algorithm selection and mutation", index)
+    # The contents chunk really ranks high, so the filter is exercised.
+    assert any(c.front_matter for c in ranking[:3])
+    for top_k in (1, 2, 3, 5):
+        expected = retrieve("genetic algorithm selection and mutation", ["app1"], store,
+                            top_k=top_k, min_similarity=0.0)
+        from_pipeline = [(r.page, r.chunk_index) for r in expected.kept]
+        from_sweep = [
+            (c.page[1], c.chunk_index)
+            for c in kept_chunks(ranking, 0.0, top_k, drop_front_matter=True)
+        ]
+        assert from_sweep == from_pipeline, top_k
+        assert 1 not in [page for page, _ in from_pipeline]  # the contents page is gone
 
 
 PAGES = [GA + " " + MUTATION, SELECTION, PIZZA]
@@ -117,6 +148,8 @@ def test_end_to_end_writes_json_and_report(tmp_path):
     assert a1["ranking"][0]["page"] == ["ga", 1]  # the mutation page ranks first
     # No document text in the results.
     assert all("text" not in r for case in data["cases"] for r in case["ranking"])
+    assert "## Front-matter filter (Phase 9)" in report
+    assert (out / "front-matter-audit.md").exists()
 
 
 def test_output_inside_backend_data_is_refused(tmp_path):
@@ -170,3 +203,43 @@ def test_held_out_items_never_change_tuning_results(tmp_path):
     assert with_them["held_out_counts"] == {"answerable": 1}
     assert with_them["ranking_held_out"].n == 1
     assert without_them["ranking_held_out"] is None
+
+
+ORIGINAL_KEYS = ("counts", "held_out_counts", "ranking", "ranking_held_out", "follow_ups_raw",
+                 "follow_ups_standalone", "top_scores", "top_scores_held_out", "threshold_sweep",
+                 "top_k_sweep", "at_settings_held_out", "alnum_sweep")
+
+
+def test_reworded_questions_never_change_the_original_results(tmp_path):
+    plain = tiny_dataset(tmp_path)
+    reworded = plain.model_validate({
+        **plain.model_dump(),
+        "reworded": [{"id": "rw-a1", "of": "a1", "question": "What does a mutation bring?",
+                      "source": "claude"}],
+    })
+
+    without = evaluate(plain, tmp_path, with_chunk_sweep=False)
+    with_them = evaluate(reworded, tmp_path, with_chunk_sweep=False)
+
+    for key in ORIGINAL_KEYS:
+        assert with_them[key] == without[key], key
+    # ...and they are reported in their own set.
+    assert [c.item_id for c in with_them["reworded_cases"]] == ["rw-a1"]
+    assert with_them["front_matter"]["reworded"]["off"]["cutoff"].expected_kept.total == 1
+
+
+def test_flagged_chunks_are_audited_but_their_text_stays_out_of_the_report(tmp_path):
+    dataset = make_dataset(tmp_path, [answerable(pages=[1], evidence=["adds variety"])],
+                           pages=[GA + " " + MUTATION, CONTENTS])
+    (tmp_path / "dataset.json").write_text(dataset.model_dump_json(), encoding="utf-8")
+    out = tmp_path / "results"
+
+    main(args(tmp_path, out))
+
+    report = (out / "retrieval-report.md").read_text(encoding="utf-8")
+    audit = (out / "front-matter-audit.md").read_text(encoding="utf-8")
+    (json_file,) = out.glob("retrieval-*.json")
+    assert "1 chunks flagged" in report and "| ga | 1 | 2 |" in report
+    assert "TABLE OF CONTENTS" in audit  # the audit shows the text, for a person to check
+    assert "TABLE OF CONTENTS" not in report  # the committed report never does
+    assert "TABLE OF CONTENTS" not in json_file.read_text(encoding="utf-8")

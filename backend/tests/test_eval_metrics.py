@@ -137,6 +137,50 @@ def test_top_k_sweep_changes_what_is_kept():
     assert (one.mean_passages, two.mean_passages) == (1, 1.5)
 
 
+# --- front matter ---
+
+TOC = ("toc", 1)
+
+
+def front(page, score):
+    return RankedChunk(page=page, score=score, usable=True, front_matter=True)
+
+
+# Like the Skylab water question: front matter outranks the answer page, which is
+# pushed out of a top_k of 2 unless the front matter is dropped.
+FM_CASES = [
+    RetrievalCase("q1", "answerable", [front(TOC, 0.74), chunk(B1, 0.70), chunk(A1, 0.66)], {A1}),
+    RetrievalCase("q2", "answerable", [chunk(A2, 0.80), chunk(B1, 0.60)], {A2}),
+]
+
+
+def test_front_matter_is_kept_unless_dropped():
+    ranking = FM_CASES[0].ranking
+
+    assert [c.page for c in kept_chunks(ranking, 0.55, top_k=2)] == [TOC, B1]
+    assert [c.page for c in kept_chunks(ranking, 0.55, top_k=2, drop_front_matter=True)] == [B1, A1]
+
+
+def test_cutoff_counts_front_matter_slots_and_what_dropping_it_changes():
+    off = evaluate_cutoff(FM_CASES, threshold=0.55, top_k=2)
+    on = evaluate_cutoff(FM_CASES, threshold=0.55, top_k=2, drop_front_matter=True)
+
+    assert off.front_matter_slots == Rate(1, 4)  # 1 of the 4 kept passages
+    assert off.questions_with_front_matter == Rate(1, 2)
+    assert off.expected_kept == Rate(1, 2)  # q1's answer page doesn't make the top 2
+    assert on.front_matter_slots == Rate(0, 4)
+    assert on.questions_with_front_matter == Rate(0, 2)
+    assert on.expected_kept == Rate(2, 2)
+    assert (off.drop_front_matter, on.drop_front_matter) == (False, True)
+
+
+def test_ranking_metrics_can_skip_front_matter():
+    off = ranking_metrics(FM_CASES, ks=[2])
+    on = ranking_metrics(FM_CASES, ks=[2], drop_front_matter=True)
+
+    assert (off.hit[2], on.hit[2]) == (0.5, 1.0)
+
+
 # --- distributions ---
 
 

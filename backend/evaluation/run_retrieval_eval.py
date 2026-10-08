@@ -13,14 +13,13 @@ import argparse
 import json
 import sys
 from collections.abc import Sequence
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 
 from app.config import settings
-from app.rag.text_quality import alnum_ratio
+from app.rag.text_quality import alnum_ratio, is_front_matter
 from app.services.chat import retrieve
-from app.services.selection import is_usable
 from evaluation.dataset import (
     DEFAULT_DATASET,
     DEFAULT_DOCUMENTS_DIR,
@@ -38,6 +37,7 @@ from evaluation.metrics import (
     RetrievalCase,
     alnum_sweep,
     evaluate_cutoff,
+    kept_chunks,
     ranking_metrics,
     threshold_sweep,
     top_k_sweep,
@@ -46,7 +46,7 @@ from evaluation.metrics import (
 from evaluation.report import num, pct, run_header, table
 
 DEFAULT_OUT = EVAL_DIR / "results"  # git-ignored
-KS = (1, 3, 5, 10)
+KS = (1, 3, 5, 8, 10)  # 8 = the app's retrieval_top_k since Phase 9
 THRESHOLDS = tuple(round(0.45 + 0.025 * i, 3) for i in range(11))  # 0.45 .. 0.70
 TOP_KS = (1, 3, 5, 8, 10)
 ALNUM_RATIOS = (0.3, 0.4, 0.5, 0.6, 0.7)
@@ -65,12 +65,16 @@ def rank(query: str, index: EvalIndex, search_k: int = SEARCH_K) -> list[RankedC
         top_k=search_k // 2,  # retrieve searches 2 * top_k
         min_similarity=-1.0,  # no threshold: the sweeps apply their own
     )
+    # The two filters are recorded separately (not through is_usable, which depends on
+    # the exclude_front_matter setting), so every metric can be computed with the
+    # front-matter filter off and on from this one search.
     return [
         RankedChunk(
             page=(index.dataset_ids[r.document_id], r.page),
             score=r.score,
-            usable=is_usable(r.text),
+            usable=alnum_ratio(r.text) >= settings.min_alnum_ratio,
             chunk_index=r.chunk_index,
+            front_matter=is_front_matter(r.text),
         )
         for r in retrieval.results
     ]
@@ -98,6 +102,91 @@ def build_cases(
     return main_cases, raw_follow_ups
 
 
+def build_reworded_cases(dataset: EvalDataset, index: EvalIndex) -> list[RetrievalCase]:
+    """The reworded tuning questions, searched as asked (they are all answerable)."""
+    return [
+        RetrievalCase(item.id, item.type, rank(item.question, index), expected_pages(item))
+        for item in dataset.reworded_items()
+    ]
+
+
+@dataclass
+class FlaggedChunk:
+    """A chunk of the evaluation index that the front-matter rule flags."""
+
+    document: str  # dataset document id
+    page: int
+    chunk_index: int
+    on_tuning_page: bool  # on a page a tuning question expects (then dropping it could hurt)
+    on_held_out_page: bool  # the same for the held-out questions (reported, never used to choose)
+    start: str  # first 100 characters: for the git-ignored audit file only, never the report
+
+
+@dataclass
+class RemovedPassage:
+    """A front-matter passage the model is given with the filter off, which the filter removes."""
+
+    question_set: str
+    item_id: str
+    rank: int  # 1 = best search result
+    page: PageRef
+    chunk_index: int
+    score: float
+
+
+def flagged_chunks(dataset: EvalDataset, index: EvalIndex) -> list[FlaggedChunk]:
+    """Every indexed chunk the front-matter rule flags, in document and page order."""
+    tuning_pages = set().union(*(expected_pages(i) for i in dataset.tuning_items()))
+    held_out = [i for i in dataset.items if i.id in dataset.held_out_ids()]
+    held_out_pages = set().union(*(expected_pages(i) for i in held_out))
+    return [
+        FlaggedChunk(
+            document=doc_id,
+            page=c.page,
+            chunk_index=c.chunk_index,
+            on_tuning_page=(doc_id, c.page) in tuning_pages,
+            on_held_out_page=(doc_id, c.page) in held_out_pages,
+            start=" ".join(c.text.split())[:100],
+        )
+        for doc_id, app_id in index.app_ids.items()
+        for c in index.store.get_chunks(app_id)
+        if is_front_matter(c.text)
+    ]
+
+
+def removed_passages(question_sets: dict[str, Sequence[RetrievalCase]]) -> list[RemovedPassage]:
+    """Front-matter passages kept at the current threshold and top_k with the filter off."""
+    removed = []
+    for label, cases in question_sets.items():
+        for case in cases:
+            kept = kept_chunks(case.ranking, settings.min_similarity, settings.retrieval_top_k)
+            for chunk in kept:
+                if chunk.front_matter:
+                    removed.append(
+                        RemovedPassage(
+                            label, case.item_id, case.ranking.index(chunk) + 1,
+                            chunk.page, chunk.chunk_index, chunk.score,
+                        )
+                    )
+    return removed
+
+
+def front_matter_comparison(question_sets: dict[str, Sequence[RetrievalCase]]) -> dict:
+    """Each question set at the current threshold and top_k, with the filter off and on."""
+    return {
+        label: {
+            ("on" if drop else "off"): {
+                "ranking": ranking_metrics(cases, KS, drop_front_matter=drop),
+                "cutoff": evaluate_cutoff(
+                    cases, settings.min_similarity, settings.retrieval_top_k, drop_front_matter=drop
+                ),
+            }
+            for drop in (False, True)
+        }
+        for label, cases in question_sets.items()
+    }
+
+
 def alnum_inputs(dataset: EvalDataset, index: EvalIndex) -> list[tuple[float, bool]]:
     """(alnum ratio, is on a page a tuning question expects) for every indexed chunk."""
     expected = set().union(*(expected_pages(i) for i in dataset.tuning_items()))
@@ -123,9 +212,12 @@ def chunk_sweep(dataset: EvalDataset, documents_dir: Path) -> list[dict]:
                 "max_chars": max_chars,
                 "overlap_chars": overlap,
                 "chunks": chunks,
-                "ranking": ranking_metrics(cases, KS),
+                "ranking": ranking_metrics(cases, KS, settings.exclude_front_matter),
                 "at_settings": evaluate_cutoff(
-                    cases, settings.min_similarity, settings.retrieval_top_k
+                    cases,
+                    settings.min_similarity,
+                    settings.retrieval_top_k,
+                    settings.exclude_front_matter,
                 ),
             }
         )
@@ -152,29 +244,39 @@ def evaluate(dataset: EvalDataset, documents_dir: Path, *, with_chunk_sweep: boo
     influence which setting looks best."""
     with temporary_index(dataset, documents_dir) as index:
         all_cases, raw_follow_ups = build_cases(dataset, index)
+        reworded = build_reworded_cases(dataset, index)
         chunks = alnum_inputs(dataset, index)
+        flagged = flagged_chunks(dataset, index)
     cases = tuning_only(all_cases, dataset)
     held_out = held_out_only(all_cases, dataset)
     raw_follow_ups = tuning_only(raw_follow_ups, dataset)
     standalone_follow_ups = [c for c in cases if c.type == "follow_up"]
+    # Every row "at the current settings" follows the app's front-matter setting.
+    fm = settings.exclude_front_matter
+    question_sets = {"tuning": cases, "reworded": reworded, "held-out": held_out}
     return {
         "cases": cases,
         "held_out_cases": held_out,
+        "reworded_cases": reworded,
         "counts": _type_counts(cases),
         "held_out_counts": _type_counts(held_out),
-        "ranking": ranking_metrics(cases, KS),
-        "ranking_held_out": ranking_metrics(held_out, KS),
-        "follow_ups_raw": ranking_metrics(raw_follow_ups, KS),
-        "follow_ups_standalone": ranking_metrics(standalone_follow_ups, KS),
+        "ranking": ranking_metrics(cases, KS, fm),
+        "ranking_held_out": ranking_metrics(held_out, KS, fm),
+        "ranking_reworded": ranking_metrics(reworded, KS, fm),
+        "follow_ups_raw": ranking_metrics(raw_follow_ups, KS, fm),
+        "follow_ups_standalone": ranking_metrics(standalone_follow_ups, KS, fm),
         "top_scores": top_scores_by_type(cases),
         "top_scores_held_out": top_scores_by_type(held_out),
-        "threshold_sweep": threshold_sweep(cases, THRESHOLDS, settings.retrieval_top_k),
-        "top_k_sweep": top_k_sweep(cases, settings.min_similarity, TOP_KS),
+        "threshold_sweep": threshold_sweep(cases, THRESHOLDS, settings.retrieval_top_k, fm),
+        "top_k_sweep": top_k_sweep(cases, settings.min_similarity, TOP_KS, fm),
         "at_settings_held_out": evaluate_cutoff(
-            held_out, settings.min_similarity, settings.retrieval_top_k
+            held_out, settings.min_similarity, settings.retrieval_top_k, fm
         ),
         "alnum_sweep": alnum_sweep(chunks, ALNUM_RATIOS),
         "chunk_sweep": chunk_sweep(dataset, documents_dir) if with_chunk_sweep else None,
+        "front_matter": front_matter_comparison(question_sets),
+        "front_matter_flagged": flagged,
+        "front_matter_removed": removed_passages(question_sets),
     }
 
 
@@ -279,6 +381,7 @@ def render(result: dict, dataset: EvalDataset) -> str:
         "",
     ]
     rows = _ranking_rows("all (tuning set)", result["ranking"])
+    rows += _ranking_rows("reworded tuning questions", result["ranking_reworded"])
     rows += _ranking_rows("held-out (owner-written)", result["ranking_held_out"])
     rows += _ranking_rows("follow-ups as typed", result["follow_ups_raw"])
     rows += _ranking_rows("follow-ups, expected standalone", result["follow_ups_standalone"])
@@ -334,6 +437,122 @@ def render(result: dict, dataset: EvalDataset) -> str:
              "false refusals", "reach LLM: on-topic"],
             rows,
         )
+    lines += _front_matter_section(result)
+    return "\n".join(lines)
+
+
+SET_LABELS = {"tuning": "Tuning", "reworded": "Reworded", "held-out": "Held-out"}
+
+
+def _front_matter_section(result: dict) -> list[str]:
+    """Filter off vs on for each question set, then which chunks it flags and removes.
+
+    Pages and scores only: the committed reports never contain document text.
+    """
+    comparison = result["front_matter"]
+    lines = [
+        "## Front-matter filter (Phase 9)",
+        "",
+        f"At min_similarity {settings.min_similarity} and top_k {settings.retrieval_top_k}, "
+        "computed from the same searches with the filter off and on. Tuning: the original "
+        "tuning questions (follow-ups as their expected standalone question). Reworded: the "
+        "same answerable tuning questions in other words. Held-out: reported only, never used "
+        "to choose. App setting during this run: exclude_front_matter = "
+        f"{settings.exclude_front_matter}.",
+        "",
+    ]
+    headers = ["Metric"] + [
+        f"{SET_LABELS[label]} {state}" for label in comparison for state in ("off", "on")
+    ]
+
+    def row(name: str, value) -> list[object]:
+        return [name] + [
+            value(comparison[label][state]) for label in comparison for state in ("off", "on")
+        ]
+
+    def hit(k: int):
+        return lambda r: pct(_hit_rate(r["ranking"], k)) if r["ranking"] else "–"
+
+    def cutoff(field: str):
+        return lambda r: pct(getattr(r["cutoff"], field))
+
+    rows = [
+        row("hit@8 (usable ranking)", hit(8)),
+        row("hit@5 (usable ranking)", hit(5)),
+        row("expected page kept", cutoff("expected_kept")),
+        row("false refusals (retrieval)", cutoff("false_refusals")),
+        row("front-matter slots / kept slots", cutoff("front_matter_slots")),
+        row("questions with ≥1 front-matter slot", cutoff("questions_with_front_matter")),
+        row("mean passages", lambda r: num(r["cutoff"].mean_passages, 2)),
+        row("reach LLM: off-topic", cutoff("false_answers_off_topic")),
+        row("reach LLM: on-topic unanswerable", cutoff("false_answers_on_topic")),
+    ]
+    lines += table(headers, rows)
+
+    flagged = result["front_matter_flagged"]
+    per_doc = {}
+    for f in flagged:
+        per_doc.setdefault(f.document, []).append(f)
+    lines += [
+        "### Chunks the rule flags (whole evaluation index)",
+        "",
+        f"{len(flagged)} chunks flagged; on a page a tuning question expects: "
+        f"{sum(f.on_tuning_page for f in flagged)}; on a held-out expected page: "
+        f"{sum(f.on_held_out_page for f in flagged)}.",
+        "",
+    ]
+    lines += table(
+        ["Document", "flagged", "pages"],
+        [[doc, len(fs), ", ".join(str(f.page) for f in fs)] for doc, fs in per_doc.items()],
+    )
+    removed = result["front_matter_removed"]
+    lines += [
+        "### Front-matter passages the filter removes",
+        "",
+        "Passages the model is given with the filter off (at the settings above).",
+        "",
+    ]
+    lines += table(
+        ["Set", "Question", "rank", "page", "chunk", "score"],
+        [
+            [SET_LABELS[r.question_set], r.item_id, r.rank, f"{r.page[0]} p{r.page[1]}",
+             r.chunk_index, num(r.score)]
+            for r in removed
+        ],
+    ) if removed else ["None.", ""]
+    return lines
+
+
+def render_audit(result: dict) -> str:
+    """The flagged-chunk audit with the start of each chunk's text, for a person to read.
+
+    Written to the git-ignored results folder only: it contains document text.
+    """
+    flagged = result["front_matter_flagged"]
+    starts = {(f.document, f.chunk_index): f.start for f in flagged}
+    lines = [
+        "# Front-matter audit (contains document text: do not commit)",
+        "",
+        f"## Every flagged chunk ({len(flagged)})",
+        "",
+    ]
+    lines += table(
+        ["Document", "page", "chunk", "tuning page", "held-out page", "first 100 characters"],
+        [
+            [f.document, f.page, f.chunk_index, "YES" if f.on_tuning_page else "",
+             "YES" if f.on_held_out_page else "", f.start.replace("|", "/")]
+            for f in flagged
+        ],
+    )
+    lines += ["## Removed from what the model is given", ""]
+    lines += table(
+        ["Set", "Question", "rank", "page", "score", "first 100 characters"],
+        [
+            [SET_LABELS[r.question_set], r.item_id, r.rank, f"{r.page[0]} p{r.page[1]}",
+             num(r.score), starts[(r.page[0], r.chunk_index)].replace("|", "/")]
+            for r in result["front_matter_removed"]
+        ],
+    )
     return "\n".join(lines)
 
 
@@ -345,8 +564,13 @@ def _hit_rate(m: RankingMetrics, k: int) -> Rate:
 
 def to_json(result: dict) -> str:
     """Everything as JSON; rankings are trimmed to the top 10 and hold no chunk text."""
-    data = {k: v for k, v in result.items() if k not in ("cases", "held_out_cases")}
-    for key in ("cases", "held_out_cases"):
+    case_keys = ("cases", "held_out_cases", "reworded_cases")
+    data = {k: v for k, v in result.items() if k not in case_keys}
+    # No document text in the JSON either: drop the start of each flagged chunk.
+    data["front_matter_flagged"] = [
+        {k: v for k, v in asdict(f).items() if k != "start"} for f in result["front_matter_flagged"]
+    ]
+    for key in case_keys:
         data[key] = [
             {
                 **asdict(c),
@@ -383,7 +607,9 @@ def main(argv: list[str] | None = None) -> int:
     (out / f"retrieval-{stamp}.json").write_text(to_json(result), encoding="utf-8")
     report = out / "retrieval-report.md"
     report.write_text(render(result, dataset), encoding="utf-8")
-    print(f"Report: {report}")
+    audit = out / "front-matter-audit.md"
+    audit.write_text(render_audit(result), encoding="utf-8")
+    print(f"Report: {report}\nFront-matter audit (has document text, don't commit): {audit}")
     return 0
 
 
