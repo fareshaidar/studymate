@@ -14,11 +14,13 @@ Environment: Windows, PowerShell, Python 3.11, venv at backend/.venv.
 - Frontend later: React + Vite + TypeScript + Tailwind
 
 ## Done so far
-Phases 0 to 4 are complete: ingestion API (upload/list/delete), LLM client
+Phases 0 to 5 are complete: ingestion API (upload/list/delete), LLM client
 with retries and an optional fallback model, POST /chat with a similarity
 threshold, citation validation, a reason field, the orphan-chunk fix and the
-diagram-noise filter. Notes are in docs/phase-notes/.
-Next: Phase 5 (conversation memory).
+diagram-noise filter; conversations (stored messages, follow-up rewriting with
+fallback, history in the prompt, /conversations endpoints).
+Notes are in docs/phase-notes/.
+Next: Phase 6 (study tools).
 
 ## Roadmap (one phase at a time, never start the next without my OK)
 5 Conversation, 6 Study tools, 7 Evaluation, 8 Frontend, 9 Hardening,
