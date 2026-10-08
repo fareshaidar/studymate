@@ -96,6 +96,48 @@ def test_invalid_question_is_rejected(env, question):
     assert client.post("/chat", json={"question": question}).status_code == 422
 
 
+def test_too_many_document_ids_are_a_422_before_any_work(env):
+    client, use_llm = env
+    llm = use_llm(FakeLLMClient())
+
+    response = client.post("/chat", json={"question": "Hi?", "document_ids": ["doc1"] * 201})
+
+    assert response.status_code == 422
+    assert "200" in response.text
+    assert llm.calls == []
+
+
+def test_two_hundred_document_ids_pass_the_limit(env):
+    client, _ = env
+    # 200 is allowed: the request gets past validation (to the 404 for unknown ids).
+    response = client.post("/chat", json={"question": "Hi?", "document_ids": [f"x{i}" for i in range(200)]})
+
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"question": "Hi?", "document_ids": ["x" * 65]},
+        {"question": "Hi?", "conversation_id": "x" * 65},
+    ],
+)
+def test_too_long_ids_are_a_422_before_any_work(env, body):
+    client, use_llm = env
+    llm = use_llm(FakeLLMClient())
+
+    assert client.post("/chat", json=body).status_code == 422
+    assert llm.calls == []
+
+
+def test_a_64_character_id_passes_the_limit(env):
+    client, _ = env
+
+    response = client.post("/chat", json={"question": "Hi?", "document_ids": ["x" * 64]})
+
+    assert response.status_code == 404  # validated, then simply unknown
+
+
 def test_unknown_document_id_is_404(env):
     client, _ = env
     response = client.post("/chat", json={"question": "Hi?", "document_ids": ["nope"]})

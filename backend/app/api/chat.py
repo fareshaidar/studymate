@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_llm_client, get_vector_store
 from app.api.errors import conversation_not_found, documents_not_found
+from app.api.limits import DocumentIds, Id
 from app.llm.base import LLMClient
 from app.rag.vectorstore import VectorStore
 from app.services.chat import Reason, UnknownDocumentError
@@ -17,9 +18,9 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     # Limit the search to these documents; empty or missing means all documents.
-    document_ids: list[str] | None = None
+    document_ids: DocumentIds | None = None
     # Continue this conversation; missing means start a new one.
-    conversation_id: str | None = None
+    conversation_id: Id | None = None
 
     @field_validator("question", mode="before")
     @classmethod

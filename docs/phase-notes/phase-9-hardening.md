@@ -186,3 +186,13 @@ front-matter flag, so one search per question gives the numbers with the filter 
 - **The UI warning** now reads "…to stay within the AI call or time limit."
 - **Tests** use a fake clock that advances only when a fake LLM call "takes" time: 0 Gemini
   calls, instant runs.
+
+## Step 9: input limits
+
+- **`app/api/limits.py`** defines the limits once: at most 200 `document_ids` per request, ids
+  of at most 64 characters (real ones are 32), file names of at most 255 characters.
+- **Ids** (chat and the three study tools; `conversation_id` too): Pydantic checks them while
+  reading the request, so a request over a limit gets a 422 before any search or LLM call.
+- **File names** are shortened to 255 characters, keeping the extension, rather than refused: a
+  long name isn't the user's fault.
+- Normal use can't reach these limits; ticking no documents (meaning all) sends no ids.

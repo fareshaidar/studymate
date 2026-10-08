@@ -105,6 +105,32 @@ def test_a_failed_cleanup_never_turns_the_answer_into_a_500(tmp_path, env, monke
     assert response.json()["detail"] == "The file is not a valid PDF."
 
 
+def test_a_very_long_filename_is_shortened_not_refused(tmp_path, env):
+    client, _, _ = env
+    pdf = tmp_path / "notes.pdf"
+    make_pdf(pdf, [GA_TEXT])
+    long_name = "lecture " * 40 + "notes.pdf"  # 329 characters
+
+    with pdf.open("rb") as f:
+        response = client.post("/documents", files={"file": (long_name, f, "application/pdf")})
+
+    assert response.status_code == 201
+    stored = response.json()["filename"]
+    assert len(stored) == 255
+    assert stored.endswith(".pdf") and stored.startswith("lecture lecture")
+    assert client.get("/documents").json()[0]["filename"] == stored
+
+
+def test_a_normal_filename_is_unchanged(tmp_path, env):
+    client, _, _ = env
+    pdf = tmp_path / "notes.pdf"
+    make_pdf(pdf, [GA_TEXT])
+
+    assert upload(client, pdf, name="Week 3 - Genetic algorithms.pdf").json()["filename"] == (
+        "Week 3 - Genetic algorithms.pdf"
+    )
+
+
 def test_non_pdf_is_rejected(tmp_path, env):
     client, _, upload_dir = env
     txt = tmp_path / "notes.txt"

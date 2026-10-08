@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_llm_client, get_vector_store
 from app.api.errors import NotFoundError, documents_not_found
+from app.api.limits import DocumentIds
 from app.llm.base import LLMClient
 from app.rag.vectorstore import VectorStore
 from app.services.selection import UnknownDocumentError
@@ -16,7 +17,7 @@ router = APIRouter(prefix="/study", tags=["study"])
 
 class StudyRequest(BaseModel):
     # Which documents to use; empty or missing means all documents.
-    document_ids: list[str] = []
+    document_ids: DocumentIds = []
     topic: str | None = Field(default=None, max_length=200)
 
     @field_validator("topic", mode="before")

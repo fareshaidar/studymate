@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_upload_dir, get_vector_store
+from app.api.limits import shorten_filename
 from app.api.upload_limit import too_large_message
 from app.config import settings
 from app.db.models import Document
@@ -76,6 +77,7 @@ def upload_document(
     filename = Path(file.filename or "").name
     if not filename.lower().endswith(".pdf"):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Only PDF files are supported.")
+    filename = shorten_filename(filename)
 
     tmp_path = upload_dir / f"upload-{uuid.uuid4().hex}.pdf"
     try:

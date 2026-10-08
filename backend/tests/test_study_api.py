@@ -161,6 +161,18 @@ def test_invalid_requests_are_422(env, path, body):
     assert client.post(path, json=body).status_code == 422
 
 
+@pytest.mark.parametrize("path", ["/study/summary", "/study/quiz", "/study/flashcards"])
+@pytest.mark.parametrize("ids", [["doc1"] * 201, ["x" * 65]])
+def test_document_id_limits_are_a_422_before_any_work(env, path, ids):
+    client, use_llm = env
+    llm = use_llm(FakeLLMClient())
+
+    response = client.post(path, json={"document_ids": ids})
+
+    assert response.status_code == 422
+    assert llm.calls == []
+
+
 def test_rate_limit_is_503(env):
     client, use_llm = env
     use_llm(FakeLLMClient(error=RateLimitError("429", retry_after=5)))
