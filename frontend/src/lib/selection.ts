@@ -48,8 +48,13 @@ export function saveSelection(conversationKey: string, ids: string[]): void {
 /** Move a selection to another key, e.g. from "new" to the id the backend assigned. */
 export function moveSelection(fromKey: string, toKey: string): void {
   saveSelection(toKey, loadSelection(fromKey));
+  forgetSelection(fromKey);
+}
+
+/** Remove a conversation's saved selection, e.g. after the conversation is deleted. */
+export function forgetSelection(conversationKey: string): void {
   try {
-    localStorage.removeItem(storageKey(fromKey));
+    localStorage.removeItem(storageKey(conversationKey));
   } catch {
     // Nothing to clean up if storage is unavailable.
   }

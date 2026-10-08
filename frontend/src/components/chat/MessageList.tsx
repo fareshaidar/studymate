@@ -21,10 +21,12 @@ interface MessageListProps {
   messages: ChatMessage[];
   /** True while waiting for an answer: shows the thinking indicator. */
   pending: boolean;
+  /** Ids of documents that still exist; see SourceDetails. */
+  existingDocumentIds?: Set<string>;
 }
 
 /** The conversation so far, scrolled to the newest message. */
-export function MessageList({ messages, pending }: MessageListProps) {
+export function MessageList({ messages, pending, existingDocumentIds }: MessageListProps) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -51,6 +53,7 @@ export function MessageList({ messages, pending }: MessageListProps) {
               found={message.found}
               reason={message.reason}
               sources={message.sources}
+              existingDocumentIds={existingDocumentIds}
             />
           </div>
         ),

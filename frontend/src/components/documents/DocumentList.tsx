@@ -1,7 +1,5 @@
-import { useState } from "react";
-
-import { errorMessage } from "../../api/client";
 import type { DocumentInfo } from "../../api/types";
+import { DeleteWithConfirm } from "../common/DeleteWithConfirm";
 
 interface DocumentListProps {
   documents: DocumentInfo[];
@@ -58,81 +56,29 @@ interface DocumentRowProps {
   onDelete: () => Promise<void>;
 }
 
-/** One document. Delete is two clicks: the button, then an inline confirm. */
+/** One document: a search-scope checkbox, its name and pages, and a two-click delete. */
 function DocumentRow({ doc, checked, onToggle, onDelete }: DocumentRowProps) {
-  const [confirming, setConfirming] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function confirmDelete(): Promise<void> {
-    setDeleting(true);
-    setError(null);
-    try {
-      await onDelete();
-      // On success the parent refreshes the list and this row disappears.
-    } catch (err) {
-      setError(errorMessage(err));
-      setDeleting(false);
-      setConfirming(false);
-    }
-  }
-
   return (
     <li className="rounded p-2 text-sm hover:bg-gray-100">
-      <div className="flex items-start gap-2">
-        <input
-          id={`doc-${doc.id}`}
-          type="checkbox"
-          className="mt-1"
-          checked={checked}
-          onChange={(event) => onToggle(event.target.checked)}
-        />
-        <label htmlFor={`doc-${doc.id}`} className="min-w-0 flex-1">
-          <span className="block truncate" title={doc.filename}>
-            {doc.filename}
-          </span>
-          <span className="text-xs text-gray-600">
-            {doc.page_count} page{doc.page_count === 1 ? "" : "s"}
-          </span>
-        </label>
-        {!confirming && (
-          <button
-            type="button"
-            aria-label={`Delete ${doc.filename}`}
-            className="text-gray-500 hover:text-red-700"
-            onClick={() => setConfirming(true)}
-          >
-            Delete
-          </button>
-        )}
-      </div>
-
-      {confirming && (
-        <div className="mt-2 flex items-center gap-2">
-          <span className="flex-1">Delete {doc.filename}?</span>
-          <button
-            type="button"
-            className="rounded bg-red-700 px-2 py-1 text-white disabled:opacity-50"
-            disabled={deleting}
-            onClick={() => void confirmDelete()}
-          >
-            {deleting ? "Deleting…" : "Delete"}
-          </button>
-          <button
-            type="button"
-            className="rounded border px-2 py-1"
-            disabled={deleting}
-            onClick={() => setConfirming(false)}
-          >
-            Cancel
-          </button>
+      <DeleteWithConfirm name={doc.filename} onDelete={onDelete}>
+        <div className="flex items-start gap-2">
+          <input
+            id={`doc-${doc.id}`}
+            type="checkbox"
+            className="mt-1"
+            checked={checked}
+            onChange={(event) => onToggle(event.target.checked)}
+          />
+          <label htmlFor={`doc-${doc.id}`} className="min-w-0 flex-1">
+            <span className="block truncate" title={doc.filename}>
+              {doc.filename}
+            </span>
+            <span className="text-xs text-gray-600">
+              {doc.page_count} page{doc.page_count === 1 ? "" : "s"}
+            </span>
+          </label>
         </div>
-      )}
-      {error && (
-        <p role="alert" className="mt-1 text-red-700">
-          {error}
-        </p>
-      )}
+      </DeleteWithConfirm>
     </li>
   );
 }

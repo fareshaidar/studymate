@@ -41,6 +41,31 @@ export interface ChatResponse {
   rewritten_question: string | null;
 }
 
+/** One conversation in the list (GET /conversations), newest first. */
+export interface ConversationSummary {
+  id: string;
+  title: string; // the first question, shortened
+  created_at: string;
+}
+
+/**
+ * One saved message. Assistant messages carry their sources and reason; the
+ * backend does not store `found` or the rewritten question.
+ */
+export interface StoredMessage {
+  id: number;
+  role: "user" | "assistant";
+  content: string;
+  sources: Source[] | null;
+  reason: string | null;
+  created_at: string;
+}
+
+/** GET /conversations/{id}: the conversation with its messages, oldest first. */
+export interface ConversationDetail extends ConversationSummary {
+  messages: StoredMessage[];
+}
+
 /**
  * The one error type every API function throws.
  *

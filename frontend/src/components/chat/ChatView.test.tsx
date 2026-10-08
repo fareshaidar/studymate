@@ -132,6 +132,61 @@ describe("ChatView", () => {
     expect(sendChat).toHaveBeenCalledTimes(2);
   });
 
+  it("shows a reopened conversation and keeps it when sending more", async () => {
+    vi.mocked(sendChat).mockResolvedValue(reply({ answer: "Because cells grow." }));
+    render(
+      <ChatView
+        documentIds={[]}
+        conversationId="c1"
+        initialMessages={[
+          { id: 1, role: "user", text: "What is mitosis?" },
+          {
+            id: 2,
+            role: "assistant",
+            answer: "Cell division [1].",
+            found: true,
+            reason: "ok",
+            sources: reply().sources,
+            rewrittenQuestion: null,
+          },
+        ]}
+        onConversationStarted={vi.fn()}
+        onNewChat={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("What is mitosis?")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Source 1/ })).toBeInTheDocument();
+
+    await ask("Why?");
+
+    expect(await screen.findByText("Because cells grow.")).toBeInTheDocument();
+    // The old messages are still there next to the new ones.
+    expect(screen.getByText("What is mitosis?")).toBeInTheDocument();
+    expect(screen.getByText("Why?", { selector: "p" })).toBeInTheDocument();
+    expect(vi.mocked(sendChat).mock.calls[0][0].conversationId).toBe("c1");
+  });
+
+  it("ignores an answer that arrives after the chat was closed", async () => {
+    let answer: (value: ChatResponse) => void = () => {};
+    vi.mocked(sendChat).mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    const onConversationStarted = vi.fn();
+    const { unmount } = render(
+      <ChatView
+        documentIds={[]}
+        conversationId={null}
+        onConversationStarted={onConversationStarted}
+        onNewChat={vi.fn()}
+      />,
+    );
+
+    await ask("What is mitosis?");
+    unmount(); // the user opened another chat
+    await act(async () => answer(reply()));
+
+    expect(onConversationStarted).not.toHaveBeenCalled();
+  });
+
   it("shows the busy countdown on a 503", async () => {
     vi.mocked(sendChat).mockRejectedValue(new ApiError(503, "The model is busy.", 12));
     render(<Harness />);

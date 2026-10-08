@@ -41,6 +41,15 @@ describe("SourceList", () => {
     expect(details).not.toHaveTextContent("file1.pdf");
   });
 
+  it("marks a source whose document was deleted and drops its link", () => {
+    render(<SourceList sources={[source(1, true), source(2, true)]} existingDocumentIds={new Set(["d2"])} />);
+
+    expect(screen.getByText("(document deleted)")).toBeInTheDocument();
+    expect(screen.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual([
+      "/api/documents/d2/file#page=20",
+    ]);
+  });
+
   it("renders nothing when there are no sources", () => {
     const { container } = render(<SourceList sources={[]} />);
 

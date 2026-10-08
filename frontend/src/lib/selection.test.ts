@@ -2,7 +2,13 @@ import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { DocumentInfo } from "../api/types";
-import { loadSelection, moveSelection, saveSelection, useSelection } from "./selection";
+import {
+  forgetSelection,
+  loadSelection,
+  moveSelection,
+  saveSelection,
+  useSelection,
+} from "./selection";
 
 function doc(id: string): DocumentInfo {
   return { id, filename: `${id}.pdf`, page_count: 1, chunk_count: 1, created_at: "2026-10-08T10:00:00" };
@@ -55,6 +61,18 @@ describe("moveSelection", () => {
 
     expect(loadSelection("c9")).toEqual(["d1"]);
     expect(loadSelection("new")).toEqual([]);
+  });
+});
+
+describe("forgetSelection", () => {
+  it("removes only that conversation's selection", () => {
+    saveSelection("c1", ["d1"]);
+    saveSelection("c2", ["d2"]);
+
+    forgetSelection("c1");
+
+    expect(loadSelection("c1")).toEqual([]);
+    expect(loadSelection("c2")).toEqual(["d2"]);
   });
 });
 

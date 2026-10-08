@@ -13,13 +13,21 @@ interface AnswerMessageProps {
   /** Why the answer is what it is; stored messages may have null. */
   reason: string | null;
   sources: Source[];
+  /** Ids of documents that still exist; see SourceDetails. */
+  existingDocumentIds?: Set<string>;
 }
 
 /**
  * One assistant answer: the text with clickable [n] chips, a card for the
  * chip that is open, and the list of sources underneath.
  */
-export function AnswerMessage({ answer, found, reason, sources }: AnswerMessageProps) {
+export function AnswerMessage({
+  answer,
+  found,
+  reason,
+  sources,
+  existingDocumentIds,
+}: AnswerMessageProps) {
   const [openN, setOpenN] = useState<number | null>(null);
   // Unique per message, so several answers on one page never share an id.
   const cardId = useId();
@@ -65,7 +73,7 @@ export function AnswerMessage({ answer, found, reason, sources }: AnswerMessageP
           className="mt-2 rounded border border-blue-200 bg-blue-50 p-2"
         >
           <div className="flex items-start justify-between gap-2">
-            <SourceDetails source={openSource} />
+            <SourceDetails source={openSource} existingDocumentIds={existingDocumentIds} />
             <button
               type="button"
               aria-label="Close source"
@@ -78,7 +86,7 @@ export function AnswerMessage({ answer, found, reason, sources }: AnswerMessageP
         </div>
       )}
 
-      <SourceList sources={sources} />
+      <SourceList sources={sources} existingDocumentIds={existingDocumentIds} />
     </div>
   );
 }
