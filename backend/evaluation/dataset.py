@@ -75,14 +75,33 @@ class EvalItem(BaseModel):
         return self
 
 
+class RewordedItem(BaseModel):
+    """The same question as a tuning item, asked in other words (Phase 9).
+
+    It has no ground truth of its own: type, document, pages and evidence come
+    from the item it rewords (`of`), so the two can never disagree. It measures
+    how much retrieval depends on the question reusing the document's wording.
+    """
+
+    id: Text
+    of: Text  # id of the answerable tuning item this rewords
+    question: Text
+    # "owner": wording a real user typed in the app; "claude": written for the evaluation.
+    source: Literal["claude", "owner"]
+
+
 class EvalDataset(BaseModel):
     documents: list[DocumentInfo] = Field(min_length=1)
     items: list[EvalItem] = Field(min_length=1)
+    # Optional, so a dataset without it still loads. Never part of `items`, so it can't
+    # change any original tuning or held-out number.
+    reworded: list[RewordedItem] = []
 
     @model_validator(mode="after")
     def check_references(self) -> "EvalDataset":
         doc_ids = [d.id for d in self.documents]
-        item_ids = [i.id for i in self.items]
+        # Reworded ids share one namespace with the items, so results can't be mixed up.
+        item_ids = [i.id for i in self.items] + [r.id for r in self.reworded]
         for kind, ids in (("document", doc_ids), ("item", item_ids)):
             duplicates = sorted({i for i in ids if ids.count(i) > 1})
             if duplicates:
@@ -90,7 +109,26 @@ class EvalDataset(BaseModel):
         for item in self.items:
             if item.document is not None and item.document not in doc_ids:
                 raise ValueError(f"item {item.id}: unknown document {item.document!r}")
+        self._check_reworded()
         return self
+
+    def _check_reworded(self) -> None:
+        by_id = {i.id: i for i in self.items}
+        originals = [r.of for r in self.reworded]
+        twice = sorted({o for o in originals if originals.count(o) > 1})
+        if twice:
+            raise ValueError(f"reworded more than once: {twice}")
+        for r in self.reworded:
+            original = by_id.get(r.of)
+            if original is None:
+                raise ValueError(f"reworded {r.id}: unknown item {r.of!r}")
+            # Held-out items must stay untouched and unused for tuning.
+            if original.author == HELD_OUT_AUTHOR:
+                raise ValueError(f"reworded {r.id}: {r.of} is held-out and can't be reworded")
+            if original.type != "answerable":
+                raise ValueError(f"reworded {r.id}: {r.of} is not an answerable item")
+            if r.question.strip() == original.question.strip():
+                raise ValueError(f"reworded {r.id}: the question is not reworded")
 
     def document(self, doc_id: str) -> DocumentInfo:
         return next(d for d in self.documents if d.id == doc_id)
@@ -102,6 +140,19 @@ class EvalDataset(BaseModel):
     def tuning_items(self) -> list[EvalItem]:
         """The items sweeps and "tuning set" rows are computed from."""
         return [i for i in self.items if i.author != HELD_OUT_AUTHOR]
+
+    def reworded_items(self) -> list[EvalItem]:
+        """Each reworded question as an item with its original's ground truth.
+
+        They belong to the tuning side (their originals are tuning items) and are
+        reported in their own rows, apart from both the original tuning items and
+        the held-out ones.
+        """
+        by_id = {i.id: i for i in self.items}
+        return [
+            by_id[r.of].model_copy(update={"id": r.id, "question": r.question})
+            for r in self.reworded
+        ]
 
 
 def load_dataset(path: Path = DEFAULT_DATASET) -> EvalDataset:

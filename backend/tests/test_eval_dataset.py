@@ -106,6 +106,64 @@ def test_document_path_checks_the_file(tmp_path):
         document_path(doc, tmp_path)
 
 
+# --- reworded questions ---
+
+
+def with_reworded(tmp_path, items, reworded) -> EvalDataset:
+    dataset = make_dataset(tmp_path, items)
+    return EvalDataset.model_validate({**dataset.model_dump(), "reworded": reworded})
+
+
+def reworded(**overrides) -> dict:
+    return {"id": "rw-a1", "of": "a1", "question": "What does a mutation bring?", "source": "claude", **overrides}
+
+
+def test_reworded_items_take_their_ground_truth_from_the_original(tmp_path):
+    dataset = with_reworded(tmp_path, [answerable()], [reworded()])
+
+    [item] = dataset.reworded_items()
+
+    assert (item.id, item.question) == ("rw-a1", "What does a mutation bring?")
+    assert (item.type, item.document, item.pages, item.evidence) == (
+        "answerable", "ga", [1], ["Mutation adds variety"],
+    )
+    # The originals are untouched and the reworded question isn't one of the items.
+    assert [i.id for i in dataset.items] == ["a1"]
+    assert dataset.items[0].question == "What does mutation add?"
+
+
+def test_a_dataset_without_reworded_questions_still_loads(tmp_path):
+    dataset = make_dataset(tmp_path, [answerable()])
+
+    assert dataset.reworded == [] and dataset.reworded_items() == []
+
+
+@pytest.mark.parametrize(
+    ("entry", "message"),
+    [
+        (reworded(of="nope"), "unknown item"),
+        (reworded(of="h1"), "held-out"),
+        (reworded(of="u1"), "not an answerable item"),
+        (reworded(question="What does mutation add?"), "not reworded"),
+        (reworded(id="a1"), "duplicate item ids"),  # clashes with an item id
+        (reworded(source="someone"), "source"),
+    ],
+)
+def test_invalid_reworded_entries_are_rejected(tmp_path, entry, message):
+    items = [
+        answerable(),
+        answerable(id="h1", author="user"),
+        {"id": "u1", "type": "unanswerable_off_topic", "question": "Pizza?", "reference_answer": "No."},
+    ]
+    with pytest.raises(ValidationError, match=message):
+        with_reworded(tmp_path, items, [entry])
+
+
+def test_an_item_can_be_reworded_only_once(tmp_path):
+    with pytest.raises(ValidationError, match="reworded more than once"):
+        with_reworded(tmp_path, [answerable()], [reworded(), reworded(id="rw-a1b", question="Why mutate?")])
+
+
 # --- checker ---
 
 
@@ -179,6 +237,24 @@ def test_main_returns_1_on_problems(tmp_path):
 def test_committed_dataset_is_valid():
     dataset = load_dataset(DEFAULT_DATASET)
     assert len(dataset.items) >= 40
+
+
+def test_committed_reworded_set_covers_the_tuning_answerable_items_only():
+    dataset = load_dataset(DEFAULT_DATASET)
+    tuning_answerable = {i.id for i in dataset.tuning_items() if i.type == "answerable"}
+
+    assert {r.of for r in dataset.reworded} == tuning_answerable
+    assert not {r.of for r in dataset.reworded} & dataset.held_out_ids()
+    # Exactly one real user's wording, kept as typed in the app.
+    owner = [r for r in dataset.reworded if r.source == "owner"]
+    assert [(r.id, r.question) for r in owner] == [
+        ("rw-sky-04", "How was drinking water stored on the Skylab orbital workshop?")
+    ]
+
+
+def test_the_held_out_set_is_unchanged():
+    # The 10 owner-written items, as before Phase 9.
+    assert len(load_dataset(DEFAULT_DATASET).held_out_ids()) == 10
 
 
 def test_committed_dataset_matches_the_pdfs():

@@ -604,5 +604,38 @@
       "question": "What is a good way to learn the guitar as a beginner?",
       "reference_answer": "Not in the documents."
     }
+  ],
+  "reworded": [
+    {"id": "rw-sky-01", "of": "sky-01", "question": "How much room did the astronauts have to live and work in on Skylab?", "source": "claude"},
+    {"id": "rw-sky-02", "of": "sky-02", "question": "When it was first designed, how many places could a spacecraft dock on Skylab's docking module?", "source": "claude"},
+    {"id": "rw-sky-03", "of": "sky-03", "question": "Why was Skylab able to carry a real freezer for its food?", "source": "claude"},
+    {"id": "rw-sky-04", "of": "sky-04", "question": "How was drinking water stored on the Skylab orbital workshop?", "source": "owner"},
+    {"id": "rw-sky-05", "of": "sky-05", "question": "How much iodine had to be in Skylab's water before the astronauts could safely drink it?", "source": "claude"},
+    {"id": "rw-sky-06", "of": "sky-06", "question": "What was the cartridge in Skylab's water system for?", "source": "claude"},
+    {"id": "rw-sky-07", "of": "sky-07", "question": "What was the astronauts' biggest complaint about showering on Skylab?", "source": "claude"},
+    {"id": "rw-sky-08", "of": "sky-08", "question": "How much soap did the first Skylab crew use up?", "source": "claude"},
+    {"id": "rw-sky-09", "of": "sky-09", "question": "Why did the Skylab astronauts use more tissues than expected?", "source": "claude"},
+    {"id": "rw-sky-10", "of": "sky-10", "question": "How did the astronauts keep the cloth slats on the light shades from caving in?", "source": "claude"},
+    {"id": "rw-sky-11", "of": "sky-11", "question": "What material was Skylab's sunshade sail made from?", "source": "claude"},
+    {"id": "rw-sky-12", "of": "sky-12", "question": "When they practised putting up the sail underwater, what did they use instead of the real sail, and why?", "source": "claude"},
+    {"id": "rw-sky-13", "of": "sky-13", "question": "How much time did engineers have to design the sunshade before the first crew flew?", "source": "claude"},
+    {"id": "rw-cam-01", "of": "cam-01", "question": "What telescope was this camera built for?", "source": "claude"},
+    {"id": "rw-cam-02", "of": "cam-02", "question": "Why does the camera carry its own mirror, centred on the optical axis, that redirects part of the incoming light?", "source": "claude"},
+    {"id": "rw-cam-03", "of": "cam-03", "question": "Why didn't the designers use a mechanical shutter to time the exposures?", "source": "claude"},
+    {"id": "rw-cam-04", "of": "cam-04", "question": "What does the camera weigh, and how much power does it normally draw?", "source": "claude"},
+    {"id": "rw-cam-05", "of": "cam-05", "question": "Why did they pick aluminium instead of invar for the plate the detector is mounted on?", "source": "claude"},
+    {"id": "rw-cam-06", "of": "cam-06", "question": "What liquid is inside the camera's heat pipes?", "source": "claude"},
+    {"id": "rw-cam-07", "of": "cam-07", "question": "How many filters fit on each wheel, and what makes the wheels rotate?", "source": "claude"},
+    {"id": "rw-cam-08", "of": "cam-08", "question": "Does spinning a filter wheel throw off where the telescope is aimed, and by how much?", "source": "claude"},
+    {"id": "rw-cam-09", "of": "cam-09", "question": "Which positions can the camera's cover shutter be moved to?", "source": "claude"},
+    {"id": "rw-cam-10", "of": "cam-10", "question": "How does an astronaut lock the camera in after putting it in?", "source": "claude"},
+    {"id": "rw-ipcc-01", "of": "ipcc-01", "question": "How many confidence levels does the IPCC use?", "source": "claude"},
+    {"id": "rw-ipcc-02", "of": "ipcc-02", "question": "When the IPCC says \"very likely\", what percentage does that mean?", "source": "claude"},
+    {"id": "rw-ipcc-03", "of": "ipcc-03", "question": "How much CO2 was in the air in 2019?", "source": "claude"},
+    {"id": "rw-ipcc-04", "of": "ipcc-04", "question": "What were the world's total greenhouse gas emissions in 2019?", "source": "claude"},
+    {"id": "rw-ipcc-05", "of": "ipcc-05", "question": "How much of the emissions from households comes from the tenth of households that pollute the most?", "source": "claude"},
+    {"id": "rw-ipcc-06", "of": "ipcc-06", "question": "How many people live in areas that are very exposed to climate change?", "source": "claude"},
+    {"id": "rw-ipcc-07", "of": "ipcc-07", "question": "How many people don't have enough water for part of the year?", "source": "claude"},
+    {"id": "rw-ipcc-08", "of": "ipcc-08", "question": "What does the IPCC mean by development that can withstand climate change?", "source": "claude"}
   ]
 }
