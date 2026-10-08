@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     # How many earlier messages (user + assistant) a follow-up question can see.
     history_window: int = 6
 
+    # Study tools. Most LLM calls one summary/quiz/flashcard request may make (free tier).
+    study_max_llm_calls: int = 8
+    # Characters of document text sent in one summary call.
+    study_batch_chars: int = 12000
+    # Passages a quiz or flashcard set is made from.
+    study_max_passages: int = 10
+
     # Largest PDF the upload endpoint accepts.
     max_upload_mb: int = 50
 
