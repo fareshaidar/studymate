@@ -162,11 +162,17 @@ Answerable questions plus follow-ups; follow-ups are searched as their expected 
   about 60% more prompt text. A full answer run with this value is described in
   "top_k 8 experiment" below; the default stays at 5.
 
-  **Update (Phase 9):** `retrieval_top_k` 8 is now the default. `min_similarity` 0.60 and the
-  front-matter filter are still not applied.
+  **Update (Phase 9):** `retrieval_top_k` 8 is now the default. `min_similarity` 0.60 is still
+  not applied, and the front-matter filter was measured and kept off (below).
 - **Front-matter filtering:** a check for tables of contents and lists of figures. Raising
   `min_alnum_ratio` to 0.6 would drop the table of contents (0.57) but not the list of figures
   (0.77).
+
+  **Update (Phase 9):** built as a dot-leader rule behind `exclude_front_matter` and measured at
+  top_k 8. It flags only the 20 Skylab contents/list chunks and frees 11 of 312 kept passages on
+  the tuning set, but "expected page kept" and hit@8 don't change (37/39 tuning, 22/31 reworded,
+  5/6 held-out), so it stays **off** by the rule set before measuring. See the README and
+  [front-matter-filter.md](../evaluation/front-matter-filter.md).
 - After any change, rerun both evaluations and check the held-out rows, which weren't used to
   choose it.
 

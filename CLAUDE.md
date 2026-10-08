@@ -29,11 +29,16 @@ React + Vite + TypeScript + Tailwind, a Vite dev proxy that strips /api instead 
 CORS, GET /documents/{id}/file for "Open PDF at page n", per-conversation document
 selection in localStorage, chat, conversations, study tools; Vitest + Testing
 Library tests with a mocked API; run with npm run dev, npm test, npm run typecheck).
-retrieval_top_k is 8 since Phase 9 (was 5); the other candidate changes
-(min_similarity 0.60, front-matter filter) await my decision.
+retrieval_top_k is 8 since Phase 9 (was 5). The front-matter filter
+(exclude_front_matter) was measured in Phase 9 and stays off by my decision: no
+gain in expected page kept or hit@8 (37/39 tuning, 22/31 reworded, 5/6 held-out).
+min_similarity 0.60 still awaits my decision. The dataset's "reworded" section (31
+rewordings of answerable tuning items; rw-sky-04 is my own wording) is tuning-side
+only; never reword or use the held-out items for choosing settings.
+Phase 9 progress is recorded in docs/phase-notes/phase-9-hardening.md.
 Evaluation PDFs are git-ignored; never commit them or backend/evaluation/results/.
 Notes are in docs/phase-notes/.
-Next: Phase 9 (hardening).
+Current: Phase 9 (hardening), steps 1-2 done; next step 3 (API key and quota).
 
 ## Roadmap (one phase at a time, never start the next without my OK)
 5 Conversation, 6 Study tools, 7 Evaluation, 8 Frontend, 9 Hardening,

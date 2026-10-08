@@ -99,6 +99,45 @@ was 5 when this was run; **Phase 9 made 8 the default**, based on this experimen
     else changed;
   - the gain rests on 3 questions.
 
+### Reworded questions and the front-matter filter (Phase 9)
+
+Retrieval only (no LLM calls), at threshold 0.55 and top_k 8. Full report:
+[front-matter-filter.md](docs/evaluation/front-matter-filter.md).
+
+- **Reworded questions:** the dataset has a separate set of 31 natural rewordings of the
+  answerable tuning questions, avoiding the documents' own terms. One of them (rw-sky-04) is a
+  question a real user typed in the app; the other 30 were written by Claude and reviewed by the
+  owner. The held-out questions were not reworded or touched.
+- **Front-matter filter:** a rule that recognises table-of-contents and list-of-figures passages
+  (at least 5 dot leaders, and at least one per 18 words), behind the setting
+  `exclude_front_matter`.
+
+| | Tuning, filter off | Tuning, on | Reworded, off | Reworded, on | Held-out, off | Held-out, on |
+|---|---|---|---|---|---|---|
+| Right page in the top 8 (hit@8) | 37/39 | 37/39 | 22/31 | 22/31 | 5/6 | 5/6 |
+| Right page in the top 5 (hit@5) | 34/39 | 34/39 | 21/31 | 22/31 | 5/6 | 5/6 |
+| Right page among the passages kept | 37/39 | 37/39 | 22/31 | 22/31 | 5/6 | 5/6 |
+| Kept passages that are front matter | 11/312 | 0/312 | 7/248 | 0/248 | 0/48 | 0/48 |
+| Questions with a front-matter passage | 9/39 | 0/39 | 5/31 | 0/31 | 0/6 | 0/6 |
+
+- **Rewording costs more than anything the filter changes.** The right page is in the top 8 for
+  37/39 tuning questions as worded in the dataset, but for only 22/31 of the same questions
+  reworded. The dataset's wording flatters retrieval. The user's own Skylab question (rw-sky-04)
+  is still missed: its answer passage isn't in the top 60.
+- **The filter removes only front matter.** It flags 20 chunks, all on the Skylab report's
+  contents and list pages (13–23), none on a page any question expects. It frees 11 of 312 kept
+  passages on the tuning set without losing any expected page.
+- **Decision: the filter stays off by default.** The rule fixed before measuring required an
+  improvement in "right page kept" or hit@8 on a tuning set, and neither changed (only hit@5 on
+  the reworded set, 21 → 22). Where the filter helped, the answer page was already kept at top_k
+  8; where retrieval failed, the answer page ranked too low for freed slots to reach it. The
+  setting can be turned on in `.env` (`EXCLUDE_FRONT_MATTER=true`). An answer evaluation, which
+  costs Gemini calls, could show whether the model answers better with less noise.
+- **Run-to-run variation:** two runs on the same code matched everywhere except the best-score
+  range of the 2 held-out off-topic questions (0.467–0.501 vs 0.501–0.504). Chroma's search is
+  approximate (HNSW) and the index is rebuilt for each run, so low-scoring questions with no
+  close match can get slightly different nearest neighbours. No count in the table changed.
+
 **Caveats**
 - The faithfulness judge is the same model family as the answerer, so the faithfulness score is
   biased upwards.
@@ -106,6 +145,22 @@ was 5 when this was run; **Phase 9 made 8 the default**, based on this experimen
 - The 10 held-out questions were drafted with AI help and reviewed by the owner.
 - The 2 held-out off-topic questions cannot confirm the threshold: both score about 0.50, so
   they are refused at both 0.55 and 0.60 and can't tell those settings apart.
+
+## Future work
+
+Retrieval ideas aimed at the gap shown by the reworded questions (22/31 in the top 8 against
+37/39 as originally worded). Each would need the same before/after measurement, on the tuning,
+reworded and held-out sets separately.
+
+- **Keyword or hybrid search:** combine the embedding search with keyword matching (e.g. BM25),
+  so exact terms like "drinking water" or "OWS" count even when the overall meaning is close to
+  many other passages.
+- **A re-ranker:** score the top 20–50 candidates again with a cross-encoder model that reads the
+  question and the passage together. More accurate than embeddings alone, but slower, and a new
+  dependency.
+- **Smaller or section-aware chunks:** 1800-character chunks can mix a section heading, a figure
+  and several topics, which blurs their embedding. Splitting at section boundaries or using
+  smaller chunks could help; the Phase 7 chunk-size sweep was within noise at n = 39.
 
 ## Tech stack
 

@@ -40,7 +40,8 @@ class Settings(BaseSettings):
     # (e.g. text diagrams drawn with box characters) are not used as sources.
     min_alnum_ratio: float = 0.5
     # Leave out table-of-contents and list-of-figures passages (rag.text_quality.is_front_matter).
-    # Off until the Phase 9 retrieval evaluation shows it helps.
+    # Off by the owner's decision: measured in Phase 9 with no gain in expected page kept
+    # or hit@8 (docs/evaluation/front-matter-filter.md).
     exclude_front_matter: bool = False
 
     # How many earlier messages (user + assistant) a follow-up question can see.
