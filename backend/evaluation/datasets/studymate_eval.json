@@ -515,6 +515,94 @@
       "type": "unanswerable_on_topic",
       "question": "Which single country emits the most CO2 each year?",
       "reference_answer": "The summary doesn't rank individual countries by emissions."
+    },
+    {
+      "id": "user-01",
+      "type": "answerable",
+      "author": "user",
+      "question": "How many countries have written adaptation into their climate policies and planning?",
+      "reference_answer": "At least 170 countries.",
+      "document": "ipcc",
+      "pages": [14],
+      "evidence": ["at least 170 countries and many cities including adaptation in their climate policies"]
+    },
+    {
+      "id": "user-02",
+      "type": "answerable",
+      "author": "user",
+      "question": "How many modelled emission pathways did the report sort into categories by warming level?",
+      "reference_answer": "1202 pathways.",
+      "document": "ipcc",
+      "pages": [15],
+      "evidence": ["1202 pathways were categorised based on their assessed global warming"]
+    },
+    {
+      "id": "user-03",
+      "type": "answerable",
+      "author": "user",
+      "question": "What is the best estimate of warming for 2081-2100 under the very high emissions scenario?",
+      "reference_answer": "4.4 °C (SSP5-8.5).",
+      "document": "ipcc",
+      "pages": [18],
+      "evidence": ["4.4°C for a very high GHG emissions scenario (SSP5-8.5)"]
+    },
+    {
+      "id": "user-04",
+      "type": "answerable",
+      "author": "user",
+      "question": "If a large volcanic eruption happened, how long would it mask human-caused warming?",
+      "reference_answer": "One to three years.",
+      "document": "ipcc",
+      "pages": [19],
+      "evidence": ["reducing global surface temperature and precipitation for one to three years"]
+    },
+    {
+      "id": "user-05",
+      "type": "answerable",
+      "author": "user",
+      "question": "On which mission day did the third crew run out of disposal bags?",
+      "reference_answer": "Mission day 25 (MD 25).",
+      "document": "skylab",
+      "pages": [108],
+      "evidence": ["The third crew ran out of disposal bags on MD25"]
+    },
+    {
+      "id": "user-06",
+      "type": "answerable",
+      "author": "user",
+      "question": "What is the maximum time the filter wheel needs to move from one position to any other?",
+      "reference_answer": "14 seconds.",
+      "document": "camera",
+      "pages": [85],
+      "evidence": ["The maximum time to index from one position to any other will be 14 seconds"]
+    },
+    {
+      "id": "user-07",
+      "type": "unanswerable_on_topic",
+      "author": "user",
+      "question": "What agreement was reached at COP27?",
+      "reference_answer": "Not in the documents (COP27 is never mentioned)."
+    },
+    {
+      "id": "user-08",
+      "type": "unanswerable_on_topic",
+      "author": "user",
+      "question": "How many servicing missions did the Space Telescope receive?",
+      "reference_answer": "Not in the documents (servicing missions are never mentioned)."
+    },
+    {
+      "id": "user-09",
+      "type": "unanswerable_off_topic",
+      "author": "user",
+      "question": "How many players are on the court for each team in basketball?",
+      "reference_answer": "Not in the documents."
+    },
+    {
+      "id": "user-10",
+      "type": "unanswerable_off_topic",
+      "author": "user",
+      "question": "What is a good way to learn the guitar as a beginner?",
+      "reference_answer": "Not in the documents."
     }
   ]
 }
