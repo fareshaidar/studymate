@@ -7,7 +7,7 @@ from app.rag.vectorstore import VectorStore
 from app.services.chat import retrieve
 from evaluation.harness import BACKEND_DATA_DIR, EvalIndex, UnsafePathError
 from evaluation.metrics import RankingMetrics, Rate, kept_chunks
-from evaluation.run_retrieval_eval import _hit_rate, main, rank
+from evaluation.run_retrieval_eval import _hit_rate, evaluate, main, rank
 from tests.test_eval_dataset import answerable, make_dataset
 
 GA = "A genetic algorithm evolves a population of candidate solutions over many generations."
@@ -98,19 +98,21 @@ def test_end_to_end_writes_json_and_report(tmp_path):
         "## min_similarity sweep",
         "## retrieval_top_k sweep",
         "## min_alnum_ratio",
-        "tuned and reported on the same",
+        "never used to choose settings",
     ):
         assert heading in report
     assert "| held-out (owner-written) | 1 |" in report
-    assert "| all (tuning set) | 3 |" in report  # 2 answerable + 1 follow-up
+    # a1 + the follow-up; a2 is held-out (author "user") and only in its own row.
+    assert "| all (tuning set) | 2 |" in report
     (json_file,) = out.glob("retrieval-*.json")
     data = json.loads(json_file.read_text(encoding="utf-8"))
-    assert data["counts"] == {
-        "answerable": 2,
+    assert data["counts"] == {  # tuning set only
+        "answerable": 1,
         "follow_up": 1,
         "unanswerable_off_topic": 1,
         "unanswerable_on_topic": 1,
     }
+    assert data["held_out_counts"] == {"answerable": 1}
     a1 = next(c for c in data["cases"] if c["item_id"] == "a1")
     assert a1["ranking"][0]["page"] == ["ga", 1]  # the mutation page ranks first
     # No document text in the results.
@@ -148,4 +150,23 @@ def test_chunk_size_table_prints_counts(tmp_path):
     assert len(rows) == 3
     for row in rows:
         hit_1, hit_5 = row.split(" | ")[3:5]
-        assert hit_1.endswith("/3)") and hit_5.endswith("/3)")  # e.g. "67% (2/3)"
+        # n = 2: the held-out item a2 never takes part in choosing a chunk size.
+        assert hit_1.endswith("/2)") and hit_5.endswith("/2)")  # e.g. "50% (1/2)"
+
+
+def test_held_out_items_never_change_tuning_results(tmp_path):
+    """Removing the owner-written items must leave every sweep and tuning row identical,
+    so they can't influence which setting is chosen."""
+    full = tiny_dataset(tmp_path)
+    without_held_out = full.model_copy(update={"items": full.tuning_items()})
+
+    with_them = evaluate(full, tmp_path, with_chunk_sweep=True)
+    without_them = evaluate(without_held_out, tmp_path, with_chunk_sweep=True)
+
+    for key in ("counts", "ranking", "follow_ups_raw", "follow_ups_standalone", "top_scores",
+                "threshold_sweep", "top_k_sweep", "alnum_sweep", "chunk_sweep"):
+        assert with_them[key] == without_them[key], key
+    # ...while the held-out item is still reported, on its own.
+    assert with_them["held_out_counts"] == {"answerable": 1}
+    assert with_them["ranking_held_out"].n == 1
+    assert without_them["ranking_held_out"] is None

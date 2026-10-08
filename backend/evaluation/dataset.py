@@ -19,9 +19,10 @@ DEFAULT_DOCUMENTS_DIR = EVAL_DIR / "datasets" / "documents"
 QuestionType = Literal[
     "answerable", "unanswerable_off_topic", "unanswerable_on_topic", "follow_up"
 ]
-# Questions written by the project owner are kept apart as a held-out subset:
-# settings are tuned on all questions, so only those give an unbiased check.
+# Questions written by the project owner are kept apart as a held-out subset: they are
+# never used to choose settings, so only they give an unbiased check of the chosen ones.
 Author = Literal["claude", "user"]
+HELD_OUT_AUTHOR = "user"
 
 Text = Annotated[str, Field(min_length=1)]  # a non-empty string
 
@@ -93,6 +94,14 @@ class EvalDataset(BaseModel):
 
     def document(self, doc_id: str) -> DocumentInfo:
         return next(d for d in self.documents if d.id == doc_id)
+
+    def held_out_ids(self) -> set[str]:
+        """Ids of the owner-written items: reported on their own, never used for tuning."""
+        return {i.id for i in self.items if i.author == HELD_OUT_AUTHOR}
+
+    def tuning_items(self) -> list[EvalItem]:
+        """The items sweeps and "tuning set" rows are computed from."""
+        return [i for i in self.items if i.author != HELD_OUT_AUTHOR]
 
 
 def load_dataset(path: Path = DEFAULT_DATASET) -> EvalDataset:

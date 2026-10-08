@@ -99,8 +99,8 @@ def build_cases(
 
 
 def alnum_inputs(dataset: EvalDataset, index: EvalIndex) -> list[tuple[float, bool]]:
-    """(alnum ratio, is on an expected page) for every indexed chunk."""
-    expected = set().union(*(expected_pages(i) for i in dataset.items))
+    """(alnum ratio, is on a page a tuning question expects) for every indexed chunk."""
+    expected = set().union(*(expected_pages(i) for i in dataset.tuning_items()))
     return [
         (alnum_ratio(c.text), (doc_id, c.page) in expected)
         for doc_id, app_id in index.app_ids.items()
@@ -117,6 +117,7 @@ def chunk_sweep(dataset: EvalDataset, documents_dir: Path) -> list[dict]:
         ) as index:
             cases, _ = build_cases(dataset, index)
             chunks = sum(len(index.store.get_chunks(a)) for a in index.app_ids.values())
+        cases = tuning_only(cases, dataset)  # chunk size is a setting: never chosen on held-out
         rows.append(
             {
                 "max_chars": max_chars,
@@ -131,22 +132,42 @@ def chunk_sweep(dataset: EvalDataset, documents_dir: Path) -> list[dict]:
     return rows
 
 
+def tuning_only(cases: Sequence[RetrievalCase], dataset: EvalDataset) -> list[RetrievalCase]:
+    held_out_ids = dataset.held_out_ids()
+    return [c for c in cases if c.item_id not in held_out_ids]
+
+
+def held_out_only(cases: Sequence[RetrievalCase], dataset: EvalDataset) -> list[RetrievalCase]:
+    held_out_ids = dataset.held_out_ids()
+    return [c for c in cases if c.item_id in held_out_ids]
+
+
+def _type_counts(cases: Sequence[RetrievalCase]) -> dict[str, int]:
+    return {t: sum(c.type == t for c in cases) for t in sorted({c.type for c in cases})}
+
+
 def evaluate(dataset: EvalDataset, documents_dir: Path, *, with_chunk_sweep: bool) -> dict:
+    """Every sweep, distribution and "tuning set" row uses the tuning items only; the
+    held-out items (owner-written) only appear in their own rows, so they never
+    influence which setting looks best."""
     with temporary_index(dataset, documents_dir) as index:
-        cases, raw_follow_ups = build_cases(dataset, index)
+        all_cases, raw_follow_ups = build_cases(dataset, index)
         chunks = alnum_inputs(dataset, index)
-    held_out_ids = {i.id for i in dataset.items if i.author == "user"}
-    held_out = [c for c in cases if c.item_id in held_out_ids]
+    cases = tuning_only(all_cases, dataset)
+    held_out = held_out_only(all_cases, dataset)
+    raw_follow_ups = tuning_only(raw_follow_ups, dataset)
     standalone_follow_ups = [c for c in cases if c.type == "follow_up"]
     return {
         "cases": cases,
-        "counts": {t: sum(c.type == t for c in cases) for t in sorted({c.type for c in cases})},
-        "held_out_count": len(held_out),
+        "held_out_cases": held_out,
+        "counts": _type_counts(cases),
+        "held_out_counts": _type_counts(held_out),
         "ranking": ranking_metrics(cases, KS),
         "ranking_held_out": ranking_metrics(held_out, KS),
         "follow_ups_raw": ranking_metrics(raw_follow_ups, KS),
         "follow_ups_standalone": ranking_metrics(standalone_follow_ups, KS),
         "top_scores": top_scores_by_type(cases),
+        "top_scores_held_out": top_scores_by_type(held_out),
         "threshold_sweep": threshold_sweep(cases, THRESHOLDS, settings.retrieval_top_k),
         "top_k_sweep": top_k_sweep(cases, settings.min_similarity, TOP_KS),
         "at_settings_held_out": evaluate_cutoff(
@@ -199,6 +220,16 @@ CUTOFF_COLUMNS = [
 ]
 
 
+def _distribution_table(distributions: dict) -> list[str]:
+    return table(
+        ["Type", "n", "min", "p25", "median", "p75", "max"],
+        [
+            [t, d.n, num(d.min), num(d.p25), num(d.median), num(d.p75), num(d.max)]
+            for t, d in distributions.items()
+        ],
+    )
+
+
 def _histogram(cases: Sequence[RetrievalCase]) -> list[str]:
     """Counts of each question's best usable score per bin, as a text table with bars."""
     groups = {
@@ -224,16 +255,18 @@ def _histogram(cases: Sequence[RetrievalCase]) -> list[str]:
 
 def render(result: dict, dataset: EvalDataset) -> str:
     lines = run_header("Retrieval evaluation")
-    counts = ", ".join(f"{t}: {n}" for t, n in result["counts"].items())
+    tuning = ", ".join(f"{t}: {n}" for t, n in result["counts"].items())
+    held_out_text = ", ".join(f"{t}: {n}" for t, n in result["held_out_counts"].items())
     lines += [
-        f"Dataset: {len(dataset.items)} questions ({counts}); "
-        f"{result['held_out_count']} written by the project owner (held-out).",
+        f"Dataset: {len(dataset.items)} questions. Tuning set: {len(result['cases'])} ({tuning}). "
+        f"Held-out set, written by the project owner: {len(result['held_out_cases'])} "
+        f"({held_out_text or 'none'}).",
         "",
-        "**Read with care.** The thresholds and top-k values below are tuned and reported on "
-        "the same questions, so the numbers at a chosen setting are optimistic. Only the "
-        "held-out questions (written by the project owner, not used to pick settings) give an "
-        "unbiased check. Every percentage shows its counts: with this few questions, one "
-        "question moves a rate by several points.",
+        "**Read with care.** Every sweep, score distribution and \"tuning set\" row uses only "
+        "the tuning set, and settings are chosen from those, so the numbers at a chosen setting "
+        "are optimistic. The held-out questions are never used to choose settings; they appear "
+        "only in the held-out rows and give the unbiased check. Every percentage shows its "
+        "counts: with this few questions, one question moves a rate by several points.",
         "",
         "Relevance is per page: a chunk counts if its page is one of the item's expected pages. "
         "Follow-ups are searched as their expected standalone question (a perfect rewrite) "
@@ -251,18 +284,14 @@ def render(result: dict, dataset: EvalDataset) -> str:
     rows += _ranking_rows("follow-ups, expected standalone", result["follow_ups_standalone"])
     lines += table(RANKING_HEADERS, rows)
 
-    lines += ["## Best score per question", ""]
-    lines += table(
-        ["Type", "n", "min", "p25", "median", "p75", "max"],
-        [
-            [t, d.n, num(d.min), num(d.p25), num(d.median), num(d.p75), num(d.max)]
-            for t, d in result["top_scores"].items()
-        ],
-    )
+    lines += ["## Best score per question (tuning set)", ""]
+    lines += _distribution_table(result["top_scores"])
     lines += _histogram(result["cases"])
+    lines += ["Held-out set:", ""]
+    lines += _distribution_table(result["top_scores_held_out"])
 
     lines += [
-        f"## min_similarity sweep (top_k = {settings.retrieval_top_k})",
+        f"## min_similarity sweep (tuning set, top_k = {settings.retrieval_top_k})",
         "",
         "What the retrieval layer alone does. A question that reaches the LLM can still be "
         "declined by the model, so 'reach LLM' is an upper bound on false answers.",
@@ -270,20 +299,28 @@ def render(result: dict, dataset: EvalDataset) -> str:
     ]
     sweep = _cutoff_rows(result["threshold_sweep"], "threshold")
     lines += table(["min_similarity"] + CUTOFF_COLUMNS, sweep)
-    lines += [f"## retrieval_top_k sweep (min_similarity = {settings.min_similarity})", ""]
+    lines += [
+        f"## retrieval_top_k sweep (tuning set, min_similarity = {settings.min_similarity})",
+        "",
+    ]
     lines += table(["top_k"] + CUTOFF_COLUMNS, _cutoff_rows(result["top_k_sweep"], "top_k"))
-    lines += ["Held-out questions at the current settings:", ""]
+    lines += ["Held-out set at the current settings (not used to choose them):", ""]
     held_out = _cutoff_rows([result["at_settings_held_out"]], "threshold")
     lines += table(["min_similarity"] + CUTOFF_COLUMNS, held_out)
 
     lines += ["## min_alnum_ratio", "", "Chunks the diagram filter would drop at each ratio.", ""]
     lines += table(
-        ["min_alnum_ratio", "chunks dropped", "of which on an expected page"],
+        ["min_alnum_ratio", "chunks dropped", "of which on a page a tuning question expects"],
         [[r.min_ratio, pct(r.dropped), r.dropped_expected] for r in result["alnum_sweep"]],
     )
 
     if result["chunk_sweep"]:
-        lines += ["## Chunk size", "", "Each size re-indexed into its own temporary store.", ""]
+        lines += [
+            "## Chunk size (tuning set)",
+            "",
+            "Each size re-indexed into its own temporary store.",
+            "",
+        ]
         rows = []
         for row in result["chunk_sweep"]:
             m, cut = row["ranking"], row["at_settings"]
@@ -308,15 +345,16 @@ def _hit_rate(m: RankingMetrics, k: int) -> Rate:
 
 def to_json(result: dict) -> str:
     """Everything as JSON; rankings are trimmed to the top 10 and hold no chunk text."""
-    data = {k: v for k, v in result.items() if k != "cases"}
-    data["cases"] = [
-        {
-            **asdict(c),
-            "expected": sorted(c.expected),
-            "ranking": [asdict(r) for r in c.ranking[:10]],
-        }
-        for c in result["cases"]
-    ]
+    data = {k: v for k, v in result.items() if k not in ("cases", "held_out_cases")}
+    for key in ("cases", "held_out_cases"):
+        data[key] = [
+            {
+                **asdict(c),
+                "expected": sorted(c.expected),
+                "ranking": [asdict(r) for r in c.ranking[:10]],
+            }
+            for c in result[key]
+        ]
     return json.dumps(data, default=_json_default, indent=1, ensure_ascii=False)
 
 

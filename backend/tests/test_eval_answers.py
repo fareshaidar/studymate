@@ -47,9 +47,9 @@ def test_fake_llm_run_writes_report_and_json(tmp_path, setup, monkeypatch):
         "## Citations",
         "## Faithfulness",
         "## Follow-up rewrites",
-        "## All questions vs held-out",
+        "## Held-out set (owner-written, never used to choose settings)",
         "biased upwards",
-        "tuned on these same questions",
+        "never used to choose settings",
     ):
         assert heading in report
     assert "| held-out (owner-written) | 1 |" in report
@@ -84,8 +84,10 @@ def test_no_llm_counts_questions_that_pass_retrieval_in_the_denominator(tmp_path
     main(args(tmp_path, out) + ["--no-llm"], **NO_SLEEP)
 
     report = (out / "answer-report-none.md").read_text(encoding="utf-8")
-    assert "| unanswerable_off_topic | 1 | 0% (0/1) |" in report
-    assert "| answerable | 2 | 0% (0/2) |" in report
+    tuning, held_out = report.split("## Held-out set")
+    assert "| unanswerable_off_topic | 1 | 0% (0/1) |" in tuning
+    assert "| answerable | 1 | 0% (0/1) |" in tuning  # a1; a2 is held-out
+    assert "| answerable | 1 | 0% (0/1) |" in held_out
 
 
 def test_limit_takes_items_round_robin(tmp_path, setup):
@@ -188,3 +190,16 @@ def test_judge_sees_only_the_cited_passages(setup):
     assert system == FAITHFULNESS_SYSTEM_PROMPT
     assert "[2] (" in prompt and "[1] (" not in prompt and "[3] (" not in prompt
     assert "Selection keeps the fittest [2]." in prompt
+
+
+def test_held_out_items_never_change_the_tuning_tables(setup):
+    dataset, index = setup
+    without_held_out = dataset.model_copy(update={"items": dataset.tuning_items()})
+
+    def tuning_section(ds):
+        answerer, judge = make_llms("fake")
+        summary = evaluate(ds, index, mode="fake", answerer=answerer, judge=judge, **NO_SLEEP)
+        report = render(summary, ds)
+        return report[report.index("## Refusals") : report.index("## Held-out set")]
+
+    assert tuning_section(dataset) == tuning_section(without_held_out)

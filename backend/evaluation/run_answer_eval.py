@@ -320,7 +320,12 @@ def _subset_rows(label: str, cases: Sequence[AnswerCase]) -> list[object]:
 
 
 def render(summary: RunSummary, dataset: EvalDataset) -> str:
-    cases = [r.case for r in summary.records]
+    """Every metric table uses the tuning set only; the held-out (owner-written) items
+    appear only in their own section, so they never influence which setting looks best."""
+    held_out_ids = dataset.held_out_ids()
+    tuning_records = [r for r in summary.records if r.case.item_id not in held_out_ids]
+    cases = [r.case for r in tuning_records]
+    held_out = [r.case for r in summary.records if r.case.item_id in held_out_ids]
     lines = run_header("Answer evaluation")
     llm_line = {
         "real": "Answers by the Gemini model configured in the settings.",
@@ -329,27 +334,31 @@ def render(summary: RunSummary, dataset: EvalDataset) -> str:
     }[summary.mode]
     lines += [
         f"{llm_line} Items evaluated: {len(summary.records)} of {len(dataset.items)} "
-        f"(round-robin over question types). Real LLM calls: {summary.real_calls}, "
-        f"cache hits: {summary.cache_hits}.",
+        f"(round-robin over question types): {len(cases)} tuning, {len(held_out)} held-out. "
+        f"Real LLM calls: {summary.real_calls}, cache hits: {summary.cache_hits}.",
+        "",
+        "**Read with care.** Every table below except the held-out section uses only the "
+        "tuning set. Settings are chosen from tuning-set results, so those numbers are "
+        "optimistic; the held-out questions (written by the project owner) are never used to "
+        "choose settings and give the unbiased check. Every percentage shows its counts.",
         "",
     ]
     if summary.mode == "none":
-        return "\n".join(lines + _retrieval_layer_table(cases))
+        lines += ["## Tuning set", ""] + _retrieval_layer_table(cases)
+        lines += ["## Held-out set", ""] + _retrieval_layer_table(held_out)
+        return "\n".join(lines)
     if summary.stopped:
         lines += [f"**The run stopped early:** {summary.stopped}. Rerun to continue (cached "
                   "replies are free).", ""]
     lines += [
-        "**Read with care.** Settings were tuned on these same questions, so these numbers are "
-        "optimistic; the held-out row (questions written by the project owner) is the unbiased "
-        "check. Every percentage shows its counts.",
-        "",
-        "## Status",
+        "## Status (all items)",
         "",
         "Items with an error (the LLM kept failing, e.g. 503) or skipped (budget or quota used "
         "up) are left out of every metric; they are not counted as wrong.",
         "",
     ]
-    lines += table(["Status", "items"], list(status_counts(cases).items()))
+    statuses = status_counts(r.case for r in summary.records)
+    lines += table(["Status", "items"], list(statuses.items()))
     not_ok = [r for r in summary.records if r.case.status != "ok"]
     if not_ok:
         lines += table(
@@ -358,7 +367,7 @@ def render(summary: RunSummary, dataset: EvalDataset) -> str:
         )
 
     lines += [
-        "## Refusals",
+        "## Refusals (tuning set)",
         "",
         "Which layer refused: retrieval (nothing similar enough, `no_relevant_chunks`) or the "
         "model (it said the answer isn't in the documents, `model_declined`). For answerable "
@@ -368,7 +377,7 @@ def render(summary: RunSummary, dataset: EvalDataset) -> str:
     lines += _refusal_table(cases)
 
     citations = citation_metrics(cases)
-    lines += ["## Citations", "", "Answered questions that have expected pages.", ""]
+    lines += ["## Citations (tuning set)", "", "Answered questions that have expected pages.", ""]
     lines += table(
         ["answers", "cited sources on an expected page", "≥1 correct citation", "no citation"],
         [[citations.answers, pct(citations.precision), pct(citations.any_correct),
@@ -376,14 +385,14 @@ def render(summary: RunSummary, dataset: EvalDataset) -> str:
     )
 
     faithfulness = faithfulness_metrics(cases)
-    judge_errors = sum(r.judge_error is not None for r in summary.records)
+    judge_errors = sum(r.judge_error is not None for r in tuning_records)
     judge_text = (
         f"a different Gemini model (`{summary.judge_model}`)"
         if summary.judge_model
         else "the same Gemini model that wrote the answers"
     )
     lines += [
-        "## Faithfulness (LLM judge)",
+        "## Faithfulness (LLM judge, tuning set)",
         "",
         f"The judge is {judge_text}: the same model family as the answerer, which tends to "
         "agree with its own kind, so these scores are **biased upwards**. Each answer is split "
@@ -397,8 +406,8 @@ def render(summary: RunSummary, dataset: EvalDataset) -> str:
     )
 
     rewrites = rewrite_metrics(cases)
-    hits = [r.rewrite_hit_at_5 for r in summary.records if r.rewrite_hit_at_5 is not None]
-    lines += ["## Follow-up rewrites", ""]
+    hits = [r.rewrite_hit_at_5 for r in tuning_records if r.rewrite_hit_at_5 is not None]
+    lines += ["## Follow-up rewrites (tuning set)", ""]
     lines += table(
         ["follow-ups", "fell back to the original", "same meaning as expected (judge)",
          "hit@5 with the actual rewrite"],
@@ -406,13 +415,16 @@ def render(summary: RunSummary, dataset: EvalDataset) -> str:
           pct(rate(hits))]],
     )
 
-    held_out = [r.case for r in summary.records if r.author == "user"]
-    lines += ["## All questions vs held-out", ""]
+    lines += [
+        "## Held-out set (owner-written, never used to choose settings)",
+        "",
+    ]
+    lines += _refusal_table(held_out)
     lines += table(
         ["Questions", "n", "off-topic refused", "on-topic unanswerable refused",
          "false refusals", "≥1 correct citation", "supported claims"],
         [
-            _subset_rows("all (tuning set)", cases),
+            _subset_rows("tuning set", cases),
             _subset_rows("held-out (owner-written)", held_out),
         ],
     )
