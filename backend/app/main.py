@@ -1,21 +1,32 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
 from app.api import chat, conversations, documents, study
+from app.api.deps import get_upload_dir, get_vector_store
 from app.api.errors import register_error_handlers
 from app.api.upload_limit import reject_oversized_uploads
 from app.config import settings
 from app.db import models  # noqa: F401  (registers the tables on Base)
-from app.api.deps import get_upload_dir, get_vector_store
-from app.db.database import Base, SessionLocal, engine
+from app.db.database import Base, SessionLocal, engine, foreign_key_violations
 from app.services.cleanup import run_startup_cleanup
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     # Create any missing tables at startup (no migrations yet).
     Base.metadata.create_all(engine)
+    # Foreign keys are enforced for new writes only; report (never fix) old rows that break them.
+    violations = foreign_key_violations(engine)
+    if violations:
+        logger.warning(
+            "%d existing rows break a foreign key (e.g. messages of a deleted conversation); "
+            "they were left unchanged",
+            violations,
+        )
     if settings.startup_cleanup:
         with SessionLocal() as session:
             run_startup_cleanup(session, get_upload_dir(), get_vector_store())

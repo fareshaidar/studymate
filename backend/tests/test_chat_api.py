@@ -11,6 +11,7 @@ from app.llm.errors import MissingAPIKeyError, ProviderError, RateLimitError
 from app.main import app
 from app.rag.chunker import Chunk
 from app.rag.vectorstore import VectorStore
+from app.services import conversations as conversations_service
 from tests.fakes import FakeLLMClient
 
 GA_TEXT = "A genetic algorithm evolves a population of solutions using selection and mutation."
@@ -268,6 +269,33 @@ def test_unknown_conversation_id_is_404(env, Session):
         "code": "conversation_not_found",
     }
     assert llm.calls == []
+    assert count(Session, Message) == 0
+
+
+def test_a_conversation_deleted_while_answering_saves_nothing_and_is_404(env, Session, monkeypatch):
+    client, _ = env
+    first = client.post("/chat", json={"question": "How do GAs work?"}).json()
+    conversation_id = first["conversation_id"]
+    real_answer = conversations_service.answer_question
+
+    def answer_then_delete(*args, **kwargs):
+        result = real_answer(*args, **kwargs)
+        # Meanwhile, the conversation is deleted (e.g. from another tab).
+        with Session() as other:
+            other.delete(other.get(Conversation, conversation_id))
+            other.commit()
+        return result
+
+    monkeypatch.setattr(conversations_service, "answer_question", answer_then_delete)
+
+    response = client.post(
+        "/chat", json={"question": "And mutation?", "conversation_id": conversation_id}
+    )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "conversation_not_found"
+    # No orphan messages: the deleted conversation's 2 messages are gone, nothing new saved.
+    assert count(Session, Conversation) == 0
     assert count(Session, Message) == 0
 
 

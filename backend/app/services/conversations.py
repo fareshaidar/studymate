@@ -1,6 +1,7 @@
 from dataclasses import asdict
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -65,7 +66,16 @@ def chat_in_conversation(
             ),
         ]
     )
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        # With foreign keys on, saving messages fails if the conversation was deleted
+        # while the answer was being computed (e.g. from another tab). Nothing is saved
+        # (no orphan messages) and the caller answers 404 "conversation no longer exists".
+        session.rollback()
+        if conversation_id is not None:
+            raise UnknownConversationError(conversation_id) from exc
+        raise
     return conversation.id, result
 
 

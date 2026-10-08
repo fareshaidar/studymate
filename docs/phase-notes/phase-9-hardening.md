@@ -196,3 +196,19 @@ front-matter flag, so one search per question gives the numbers with the filter 
 - **File names** are shortened to 255 characters, keeping the extension, rather than refused: a
   long name isn't the user's fault.
 - Normal use can't reach these limits; ticking no documents (meaning all) sends no ids.
+
+## Step 10: SQLite settings
+
+- **Set on every connection** (`make_engine`): foreign keys on, WAL journal mode, and a 10 s busy
+  timeout (Python's default was 5 s).
+- **The bug it fixes:** a conversation deleted while its answer was loading used to leave the
+  new messages behind as invisible orphans. With foreign keys on, that save fails, is rolled
+  back, and chat answers the existing 404 `conversation_not_found`.
+- **Existing data:** no row or table changes. Foreign keys only check new writes, so startup
+  runs the read-only `PRAGMA foreign_key_check` and logs (never fixes) any old violating rows.
+  The real database had 0 before the change (3 documents, 2 conversations, 6 messages).
+- **WAL** is stored in the database file and adds `studymate.db-wal` and `studymate.db-shm`
+  next to it; undo with `PRAGMA journal_mode=DELETE`. The owner backed up the database first
+  (`studymate.db.bak`); all of these are under the git-ignored `backend/data/`.
+- **Tests** use temporary database files only; the real database was confirmed untouched after
+  the test run (no WAL files, same size and time as the backup).
