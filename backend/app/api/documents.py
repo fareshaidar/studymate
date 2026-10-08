@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -72,6 +73,33 @@ def upload_document(
 def list_documents(session: Session = Depends(get_db)) -> list[Document]:
     """All uploaded documents, newest first."""
     return list(session.scalars(select(Document).order_by(Document.created_at.desc())))
+
+
+@router.get("/{document_id}/file")
+def get_document_file(
+    document_id: str,
+    session: Session = Depends(get_db),
+    upload_dir: Path = Depends(get_upload_dir),
+) -> FileResponse:
+    """Serve the original PDF so the frontend can open it at a cited page."""
+    doc = session.get(Document, document_id)
+    if doc is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found.")
+    # Built from the stored id of an existing row, never from the raw URL text,
+    # so a request like "../../.env" cannot reach a file outside upload_dir.
+    path = upload_dir / f"{doc.id}.pdf"
+    if not path.is_file():
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, "The PDF file for this document is missing."
+        )
+    # "inline" makes the browser show the PDF (so #page=n works) instead of
+    # downloading it; the filename still names the tab.
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        filename=doc.filename,
+        content_disposition_type="inline",
+    )
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)

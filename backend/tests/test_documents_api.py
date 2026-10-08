@@ -113,3 +113,54 @@ def test_delete_unknown_document_returns_404(env):
     client, _, _ = env
 
     assert client.delete("/documents/does-not-exist").status_code == 404
+
+
+def test_get_file_returns_the_pdf_inline(tmp_path, env):
+    client, _, _ = env
+    pdf = tmp_path / "notes.pdf"
+    make_pdf(pdf, [GA_TEXT])
+    doc_id = upload(client, pdf).json()["id"]
+
+    response = client.get(f"/documents/{doc_id}/file")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content == pdf.read_bytes()
+    disposition = response.headers["content-disposition"]
+    assert disposition.startswith("inline")
+    assert "notes.pdf" in disposition
+
+
+def test_get_file_for_unknown_document_returns_404(env):
+    client, _, _ = env
+
+    response = client.get("/documents/does-not-exist/file")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Document not found."
+
+
+def test_get_file_returns_404_when_the_stored_file_is_missing(tmp_path, env):
+    client, _, upload_dir = env
+    pdf = tmp_path / "notes.pdf"
+    make_pdf(pdf, [GA_TEXT])
+    doc_id = upload(client, pdf).json()["id"]
+    (upload_dir / f"{doc_id}.pdf").unlink()
+
+    response = client.get(f"/documents/{doc_id}/file")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "The PDF file for this document is missing."
+
+
+@pytest.mark.parametrize("bad_id", ["..%2Fsecret", "..", "..%2F..%2Fsecret", "%2E%2E%2Fsecret"])
+def test_get_file_cannot_escape_the_upload_folder(tmp_path, env, bad_id):
+    client, _, _ = env
+    # A file next to the upload folder, which a path-traversal bug could reach.
+    secret = tmp_path / "secret.pdf"
+    secret.write_bytes(b"%PDF-TOP-SECRET")
+
+    response = client.get(f"/documents/{bad_id}/file")
+
+    assert response.status_code == 404
+    assert b"TOP-SECRET" not in response.content
