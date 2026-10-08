@@ -68,4 +68,7 @@ def chat(
         )
     except (UnknownDocumentError, UnknownConversationError) as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
-    return {**asdict(result), "conversation_id": conversation_id}
+    body = asdict(result)
+    # Full passage text is for evaluation only; the snippets in `sources` are what clients get.
+    del body["passages"]
+    return {**body, "conversation_id": conversation_id}

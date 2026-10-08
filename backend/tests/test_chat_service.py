@@ -8,7 +8,7 @@ from app.rag.chunker import Chunk
 from app.llm.errors import ProviderError, RateLimitError
 from app.rag.prompts import NOT_FOUND_ANSWER, REWRITE_SYSTEM_PROMPT, SYSTEM_PROMPT, HistoryMessage
 from app.rag.vectorstore import VectorStore
-from app.services.chat import UnknownDocumentError, answer_question
+from app.services.chat import UnknownDocumentError, answer_question, retrieve
 from tests.fakes import FakeLLMClient
 
 GA_TEXT = "A genetic algorithm evolves a population of solutions using selection and mutation."
@@ -258,6 +258,68 @@ def test_long_chunks_get_a_short_snippet(session, store, threshold):
     assert len(snippet) <= 201
     assert snippet.endswith("…")
     assert not snippet[:-1].endswith(" ")
+    # The full text the model saw is on the result, not in the source.
+    assert result.passages[0].text == long_text.strip()  # stripped like every passage
+    assert (result.passages[0].n, result.passages[0].page) == (1, 1)
+
+
+def test_passages_are_what_the_model_saw(session, store, threshold):
+    mixed = "│ Counter │ └───┘ ↓ " + GA_TEXT
+    add_document(session, store, "doc1", "ga.pdf", [mixed])
+    threshold(0.0)
+    llm = FakeLLMClient(reply="A [1].")
+
+    result = ask("genetic algorithm", session, store, llm)
+
+    (passage,) = result.passages
+    assert passage.text in llm.calls[0][0]
+    assert "┌" not in passage.text and "│" not in passage.text
+
+
+def test_model_declined_keeps_passages_but_not_found_has_none(session, store, threshold):
+    add_document(session, store, "doc1", "ga.pdf", [GA_TEXT])
+    threshold(0.0)
+    declined = ask("genetic algorithm", session, store, FakeLLMClient(reply=NOT_FOUND_ANSWER))
+    threshold(0.99)
+    not_found = ask("genetic algorithm", session, store, FakeLLMClient())
+
+    assert declined.reason == "model_declined"
+    assert [p.text for p in declined.passages] == [GA_TEXT]
+    assert not_found.passages == []
+
+
+# --- retrieve() ---
+
+
+def test_retrieve_uses_settings_by_default(session, store, threshold, monkeypatch):
+    add_document(session, store, "doc1", "notes.pdf", [GA_TEXT, PIZZA_TEXT, "Selection keeps the fittest."])
+    threshold(0.0)
+    monkeypatch.setattr(settings, "retrieval_top_k", 1)
+
+    retrieval = retrieve("genetic algorithm", ["doc1"], store)
+
+    assert len(retrieval.results) == 2  # over-fetched: 2 * top_k
+    assert [r.text for r in retrieval.kept] == [GA_TEXT]
+
+
+def test_retrieve_overrides_top_k_and_threshold(session, store, threshold):
+    add_document(session, store, "doc1", "notes.pdf", [GA_TEXT, PIZZA_TEXT, "Selection keeps the fittest."])
+    threshold(0.99)  # the setting would drop everything, the argument wins
+
+    retrieval = retrieve("genetic algorithm", ["doc1"], store, top_k=3, min_similarity=0.0)
+
+    assert len(retrieval.kept) == 3
+    scores = [r.score for r in retrieval.results]
+    assert scores == sorted(scores, reverse=True)
+
+
+def test_retrieve_drops_unusable_chunks_but_reports_them(session, store):
+    add_document(session, store, "doc1", "ga.pdf", [DIAGRAM, GA_TEXT])
+
+    retrieval = retrieve("genetic algorithm", ["doc1"], store, top_k=2, min_similarity=0.0)
+
+    assert DIAGRAM in [r.text for r in retrieval.results]
+    assert [r.text for r in retrieval.kept] == [GA_TEXT]
 
 
 # --- Conversation history and query rewriting ---

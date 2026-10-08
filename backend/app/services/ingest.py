@@ -14,12 +14,19 @@ class IngestError(ValueError):
 
 
 def ingest_pdf(
-    pdf_path: Path, filename: str, session: Session, store: VectorStore
+    pdf_path: Path,
+    filename: str,
+    session: Session,
+    store: VectorStore,
+    *,
+    max_chars: int = 1800,
+    overlap_chars: int = 250,
 ) -> Document:
     """Parse, chunk and index one PDF, and record it in the database.
 
     Chroma and SQLite are kept in sync: if either step fails, the chunks are
-    removed again so no half-indexed document is left behind.
+    removed again so no half-indexed document is left behind. The chunk size
+    arguments exist so evaluation can compare sizes; the app uses the defaults.
     """
     try:
         pages = extract_pages(pdf_path)
@@ -27,7 +34,7 @@ def ingest_pdf(
     except pymupdf.FileDataError as exc:
         raise IngestError("The file is not a valid PDF.") from exc
 
-    chunks = chunk_pages(pages)
+    chunks = chunk_pages(pages, max_chars=max_chars, overlap_chars=overlap_chars)
     if not chunks:
         raise IngestError(
             "No text could be extracted from this PDF (is it a scanned image?)."

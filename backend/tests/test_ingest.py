@@ -42,6 +42,19 @@ def test_ingest_records_document_and_indexes_chunks(tmp_path, session, store):
     assert {r.page for r in results} == {1, 3}
 
 
+def test_chunk_size_can_be_chosen(tmp_path, session, store):
+    # One sentence per line: insert_text doesn't wrap, and the chunker rejoins the lines.
+    page = "\n".join(f"Sentence number {i} is about genetic algorithms." for i in range(40))
+    pdf = tmp_path / "notes.pdf"
+    make_pdf(pdf, [page])
+
+    default = ingest_pdf(pdf, "default.pdf", session, store)
+    small = ingest_pdf(pdf, "small.pdf", session, store, max_chars=300, overlap_chars=50)
+
+    assert small.chunk_count > default.chunk_count
+    assert all(len(c.text) <= 300 for c in store.get_chunks(small.id))
+
+
 def test_pdf_without_text_is_rejected_and_not_saved(tmp_path, session, store):
     pdf = tmp_path / "scan.pdf"
     make_pdf(pdf, ["", ""])

@@ -167,6 +167,19 @@ def test_first_question_starts_a_conversation_with_a_short_title(env, Session):
     assert body["rewritten_question"] is None
 
 
+def test_full_passage_text_is_neither_returned_nor_stored(env, Session):
+    client, _ = env
+
+    body = client.post("/chat", json={"question": "How do GAs work?"}).json()
+
+    assert "passages" not in body
+    source_fields = {"n", "document_id", "filename", "page", "snippet", "score", "cited"}
+    assert set(body["sources"][0]) == source_fields
+    with Session() as session:
+        stored = session.get(Conversation, body["conversation_id"]).messages[1]
+        assert set(stored.sources[0]) == source_fields
+
+
 def test_follow_up_continues_the_conversation(env, Session):
     client, use_llm = env
     first = client.post("/chat", json={"question": "How do GAs work?"}).json()

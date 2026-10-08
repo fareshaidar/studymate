@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 from sqlalchemy.orm import Session
@@ -60,6 +60,37 @@ class ChatResult:
     sources: list[Source]
     # The standalone question used for retrieval, or None if the original question was used.
     rewritten_question: str | None = None
+    # The passages exactly as the model saw them (full text), for evaluation.
+    # Deliberately not part of Source: it is never stored with a message or sent by the API.
+    passages: list[PromptChunk] = field(default_factory=list)
+
+
+@dataclass
+class Retrieval:
+    results: list[SearchResult]  # everything the search returned, best first
+    kept: list[SearchResult]  # similar enough and usable, at most top_k, best first
+
+
+def retrieve(
+    query: str,
+    document_ids: list[str],
+    store: VectorStore,
+    *,
+    top_k: int | None = None,
+    min_similarity: float | None = None,
+) -> Retrieval:
+    """Search the given documents and keep the chunks good enough to show the model.
+
+    `top_k` and `min_similarity` default to the settings; evaluation passes its own
+    values to compare them. `document_ids` must not be empty: the store would then
+    search every chunk, orphans included.
+    """
+    top_k = settings.retrieval_top_k if top_k is None else top_k
+    min_similarity = settings.min_similarity if min_similarity is None else min_similarity
+    # Over-fetch, so chunks dropped below are replaced by the next best ones.
+    results = store.search(query, k=top_k * 2, document_ids=document_ids)
+    kept = [r for r in results if r.score >= min_similarity and is_usable(r.text)][:top_k]
+    return Retrieval(results=results, kept=kept)
 
 
 def rewrite_question(
@@ -125,15 +156,8 @@ def answer_question(
 
     # Always search only documents that exist in the database, so chunks left
     # behind without a row (orphans) can't take any of the top-k slots.
-    # Over-fetch, so chunks dropped below are replaced by the next best ones.
-    results = store.search(
-        standalone, k=settings.retrieval_top_k * 2, document_ids=list(filenames)
-    )
-    relevant = [
-        r
-        for r in results
-        if r.score >= settings.min_similarity and is_usable(r.text)
-    ][: settings.retrieval_top_k]
+    retrieval = retrieve(standalone, list(filenames), store)
+    results, relevant = retrieval.results, retrieval.kept
     if not relevant:
         return _finish(
             "no_relevant_chunks", results=results, kept=relevant, history=history, rewritten=rewritten
@@ -150,7 +174,12 @@ def answer_question(
 
     if is_not_found_answer(raw_answer):
         return _finish(
-            "model_declined", results=results, kept=relevant, history=history, rewritten=rewritten
+            "model_declined",
+            results=results,
+            kept=relevant,
+            history=history,
+            rewritten=rewritten,
+            passages=chunks,
         )
 
     citations = check_citations(raw_answer, n_sources=len(chunks))
@@ -166,6 +195,7 @@ def answer_question(
         rewritten=rewritten,
         answer=citations.text,
         sources=sources,
+        passages=chunks,
     )
 
 
@@ -178,6 +208,7 @@ def _finish(
     rewritten: str | None = None,
     answer: str = NOT_FOUND_ANSWER,
     sources: list[Source] | None = None,
+    passages: list[PromptChunk] | None = None,
 ) -> ChatResult:
     """Log the outcome once per request (no question or answer text) and build the result."""
     logger.info(
@@ -195,6 +226,7 @@ def _finish(
         reason=reason,
         sources=sources or [],
         rewritten_question=rewritten,
+        passages=passages or [],
     )
 
 
