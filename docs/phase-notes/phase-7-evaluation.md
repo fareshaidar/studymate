@@ -93,7 +93,8 @@ Answerable questions plus follow-ups; follow-ups are searched as their expected 
 | held-out | 6 | 3/6 | 5/6 | 5/6 | 0.59 |
 
 - **Follow-ups (tuning set, n = 8):** searched as typed, hit@5 is 3/8. Searched as the expected
-  standalone question, it's 6/8. With the model's actual rewrites it's 7/8 (answer run).
+  standalone question, it's 6/8. With the model's actual rewrites it's 7/8 (answer run), but one
+  of those 7 (fu-06) reached only an unhelpful passage of the right page.
 - **Best score per question (tuning set):**
   - answerable: 0.62–0.81;
   - off-topic: 0.47–0.61;
@@ -131,17 +132,25 @@ Answerable questions plus follow-ups; follow-ups are searched as their expected 
    held-out ones score about 0.50). On-topic questions the documents don't answer score like
    answerable ones (0.61–0.71), so no threshold can separate them, and the model's "not found"
    rule caught all 10.
-2. **False refusals come from retrieval, not the prompt.** Two of them were traced:
-   - **sky-04:** the expected page ranked 8th, outside top_k 5. The table of contents and the
-     list of figures took 2 of the 5 slots.
-   - **fu-01:** the answer is one sentence at the top of a page whose chunk is mostly about
-     something else, so it isn't in the top 60.
+2. **False refusals come from retrieval, not the prompt.** All 5 were traced (4 tuning,
+   1 held-out). For the 4 tuning items, the exact prompts were rebuilt and the raw replies found
+   in the reply cache, with no new LLM calls. In every case the passage containing the answer was
+   **not among the 5 shown to the model**, so its "not found" was correct for what it saw.
 
-   In both cases the model correctly declined the passages it was given. The held-out false
-   refusal (user-06) is also a retrieval miss: neighbouring filter-wheel pages outrank the
-   answer page.
+   | Item | Answer passage rank | Why it lost |
+   |---|---|---|
+   | sky-04 | 8th | The table of contents and the list of figures (OCR front matter) took 2 of the 5 slots. |
+   | sky-13 | 8th | Five other passages from the same twin-pole-sail section scored 0.639–0.659 against 0.628. |
+   | fu-06 | 7th | Page 10 *was* in the top 5, but only as its footnotes passage; the A.1.1 passage with the land/ocean figures ranked 7th. |
+   | fu-01 | not in top 60 | The answer is one sentence at the top of a page whose chunk is mostly about wipes. |
+   | user-06 (held-out) | not in top 10 | Neighbouring filter-wheel pages (77, 80) outrank page 85. |
+
+   In 3 of 5 the answer passage ranked 7th or 8th; `top_k` 8 would have shown it for sky-04,
+   sky-13 and fu-06 (ranks 1–8 are all usable and above 0.55). In 2 of 5 it was out of reach
+   of any top_k considered.
 3. **Rewriting follow-ups is worth its LLM call:** hit@5 goes from 3/8 as typed to 7/8 with the
-   model's rewrites.
+   model's rewrites. One of those 7 (fu-06) reached only the right page's footnotes, not the
+   answer.
 
 ## Settings worth considering (not applied; the owner decides)
 
@@ -149,7 +158,9 @@ Answerable questions plus follow-ups; follow-ups are searched as their expected 
   false refusals on the tuning set. The 2 held-out off-topic questions score about 0.50, so they
   are refused at both 0.55 and 0.60 and can't confirm the change.
 - **`retrieval_top_k` 8:** an expected page is kept for 3 more tuning questions (37/39), for
-  about 60% more prompt text. It would have fixed sky-04.
+  about 60% more prompt text. It would have put the answer passage in front of the model for
+  3 of the 4 tuning false refusals (sky-04, sky-13, fu-06); whether the model then answers needs
+  a rerun.
 - **Front-matter filtering:** a check for tables of contents and lists of figures. Raising
   `min_alnum_ratio` to 0.6 would drop the table of contents (0.57) but not the list of figures
   (0.77).
@@ -170,10 +181,15 @@ Answerable questions plus follow-ups; follow-ups are searched as their expected 
     So citation precision (36/42) is a lower bound.
   - **Figure pages:** questions avoid the OCR'd figure pages, so the `min_alnum_ratio` sweep
     can't show harm from the filter.
+  - **Pages, not passages:** hit@k and "expected page kept" count a hit when *any* passage of
+    the right page is retrieved, even one without the answer. fu-06 is such a case: page 10's
+    footnotes were shown, its answer passage wasn't. So these rates can overstate what the model
+    actually receives; evidence-quote matching per passage would be stricter.
 - **The judge is the same model family as the answerer**, which tends to agree with it. The
   46/46 supported claims are biased upwards and weren't spot-checked by a person. The rewrite
-  judge (5/8 same meaning) disagrees with retrieval success (7/8 hit@5), so it judges wording
-  more strictly than usefulness.
+  judge (5/8 same meaning) is stricter than page-level retrieval success (7/8 hit@5). In fu-06
+  it was right: the rewrite dropped the 2011–2020 period, and retrieval only reached the page's
+  footnotes.
 - **Settings are chosen on the tuning set,** so tuning-set numbers at a chosen setting are
   optimistic.
 - **Reruns aren't new samples.** The reply cache makes a rerun reproduce the same answers; to
@@ -218,8 +234,9 @@ Answerable questions plus follow-ups; follow-ups are searched as their expected 
    answer. The daily quota stops the run cleanly with partial results.
 
 5. **Q: Walk me through a failure you diagnosed.**
-   A: Two answerable questions were refused. I rebuilt the exact prompts and found the raw model
-   replies in the cache, so no new API calls were needed. In one, the right page ranked 8th, just
+   A: Five answerable questions were refused; I traced all of them. For the tuning ones I rebuilt
+   the exact prompts and found the raw model replies in the cache, so no new API calls were
+   needed. Two examples: In one, the right page ranked 8th, just
    outside top_k 5, and the table of contents and the list of figures from the OCR scan took 2 of
    the 5 slots. In the other, the answer was one sentence at the top of a page whose chunk was
    mostly about something else, so it never ranked. In both cases the model was right to decline

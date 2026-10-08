@@ -4,16 +4,16 @@ A RAG-based study assistant. Upload your lecture notes and PDFs, ask questions,
 and get answers with citations to the exact document and page. It also
 generates summaries, quizzes, and flashcards from your material.
 
-> Status: under development (Phase 0: project setup).
+> Status: the backend is done (Phases 0–7: ingestion, cited chat, conversations, study tools,
+> evaluation). Next: Phase 8, the React frontend.
 
-## Planned features
+## Features
 
-- Multi-document upload and indexing
-- Grounded answers with document and page citations
-- Fallback when the answer is not in the material
-- Conversation memory and follow-up questions
-- Summaries, quizzes, and flashcards
-- Evaluation of retrieval and answer quality
+- PDF upload and indexing, with answers citing the exact document and page
+- A "not in your documents" answer when the material doesn't cover the question
+- Conversations with follow-up questions
+- Summaries, quizzes and flashcards from your documents
+- An evaluation suite for retrieval and answer quality (see [Evaluation](#evaluation))
 
 ## Evaluation
 
@@ -48,13 +48,18 @@ their intended standalone question.
 - **Off-topic questions** score low and are mostly stopped by the similarity threshold.
 - **On-topic questions** whose answer isn't in the documents score in the same range as many
   answerable ones (0.61–0.71 vs 0.62–0.81), so no threshold separates them. The model's "not found" rule refused all 10.
-- **Every false refusal** came from retrieval not surfacing the right page (front-matter pages
-  taking slots, an answer sentence buried in an unrelated chunk); the model was right to decline
-  what it was shown.
+- **All 5 false refusals (4 tuning, 1 held-out) were traced.** In every one, the passage
+  containing the answer was not among the 5 shown to the model, so declining was correct. The
+  answer passage ranked 7th or 8th in 3 cases and was outside the top 10 in 2. In one case the
+  right page was shown, but only its footnotes passage.
 - **Rewriting follow-up questions** raises "right page in the top 5" from 3/8 (as typed) to 7/8.
+  This counts pages, not passages: one of the 7 got only an unhelpful passage from the right
+  page.
 - **On the tuning set, a threshold of 0.60 and 8 passages look better.** They're not applied
-  yet: off-topic questions reaching the model would drop from 5/8 to 1/8, and the right page
-  would be kept for 37/39 instead of 34/39.
+  yet:
+  - off-topic questions reaching the model would drop from 5/8 to 1/8;
+  - the right page would be kept for 37/39 instead of 34/39;
+  - 8 passages would have shown the answer passage for 3 of the 4 tuning false refusals.
 
 **Caveats**
 - The faithfulness judge is the same model family as the answerer, so the faithfulness score is
