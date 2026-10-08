@@ -24,6 +24,16 @@ function fakeBackend(initialDocs: DocumentInfo[]) {
     const method = init?.method ?? "GET";
     if (url === "/api/health") return json({ status: "ok" });
     if (url === "/api/documents" && method === "GET") return json(docs);
+    if (url === "/api/chat" && method === "POST") {
+      return json({
+        answer: "Mitosis.",
+        found: true,
+        reason: "ok",
+        sources: [],
+        conversation_id: "c1",
+        rewritten_question: null,
+      });
+    }
     const match = /^\/api\/documents\/([^/]+)$/.exec(url);
     if (match && method === "DELETE") {
       docs = docs.filter((d) => d.id !== match[1]);
@@ -71,6 +81,20 @@ describe("App", () => {
 
     expect(await screen.findByText("Searching all documents")).toBeInTheDocument();
     expect(screen.queryByText("biology.pdf")).not.toBeInTheDocument();
+  });
+
+  it("moves the selection to the conversation once the first answer arrives", async () => {
+    fakeBackend([biology, history]);
+    render(<App />);
+    await userEvent.click(await screen.findByRole("checkbox", { name: /biology\.pdf/ }));
+
+    await userEvent.type(screen.getByLabelText("Your question"), "What is mitosis?{Enter}");
+    expect(await screen.findByText("Mitosis.")).toBeInTheDocument();
+
+    expect(loadSelection("c1")).toEqual(["d1"]);
+    expect(loadSelection(NEW_CONVERSATION_KEY)).toEqual([]);
+    // Still ticked on screen, now read from the conversation's own key.
+    expect(screen.getByRole("checkbox", { name: /biology\.pdf/ })).toBeChecked();
   });
 
   it("shows the offline banner and a list error when the backend is down", async () => {
