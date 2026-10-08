@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     # (e.g. text diagrams drawn with box characters) are not used as sources.
     min_alnum_ratio: float = 0.5
 
+    # How many earlier messages (user + assistant) a follow-up question can see.
+    history_window: int = 6
+
     # Largest PDF the upload endpoint accepts.
     max_upload_mb: int = 50
 
