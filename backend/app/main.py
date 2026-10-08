@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import chat, documents
+from app.api import chat, conversations, documents
 from app.api.errors import register_error_handlers
 from app.config import settings
 from app.db import models  # noqa: F401  (registers the tables on Base)
@@ -24,6 +24,7 @@ app = FastAPI(
 )
 app.include_router(documents.router)
 app.include_router(chat.router)
+app.include_router(conversations.router)
 register_error_handlers(app)
 
 
