@@ -4,8 +4,8 @@ A RAG-based study assistant. Upload your lecture notes and PDFs, ask questions,
 and get answers with citations to the exact document and page. It also
 generates summaries, quizzes, and flashcards from your material.
 
-> Status: the backend is done (Phases 0–7: ingestion, cited chat, conversations, study tools,
-> evaluation). Next: Phase 8, the React frontend.
+> Status: Phases 0–8 are done: the backend (ingestion, cited chat, conversations, study tools,
+> evaluation) and the React frontend. Next: Phase 9, hardening.
 
 ## Features
 
@@ -14,6 +14,14 @@ generates summaries, quizzes, and flashcards from your material.
 - Conversations with follow-up questions
 - Summaries, quizzes and flashcards from your documents
 - An evaluation suite for retrieval and answer quality (see [Evaluation](#evaluation))
+- A browser UI:
+  - upload with a progress bar;
+  - choose which documents to search;
+  - clickable citations that open the PDF at the cited page;
+  - saved conversations and a Study tab;
+  - keyboard and screen-reader basics, and a layout that works on narrow screens.
+
+  See [the Phase 8 notes](docs/phase-notes/phase-8-frontend.md).
 
 ## Evaluation
 
@@ -98,7 +106,9 @@ default stays at 5.**
 
 ## Tech stack
 
-Python, FastAPI, ChromaDB, sentence-transformers, Gemini API, React.
+- **Backend:** Python, FastAPI, SQLite, ChromaDB, sentence-transformers, the Gemini API.
+- **Frontend:** React 19, TypeScript 7, Vite 8, Tailwind CSS 4.
+- **Tests:** pytest for the backend; Vitest and Testing Library for the frontend.
 
 ## Run the backend
 
@@ -112,3 +122,26 @@ uvicorn app.main:app --reload
 ```
 
 Then open http://127.0.0.1:8000/docs
+
+## Run the frontend
+
+Needs Node.js (developed with Node 24). Keep the backend running in one PowerShell window, then in
+a second one:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Then open http://localhost:5173. The Vite dev server forwards every `/api/...` request to the
+backend at http://127.0.0.1:8000 (removing the `/api` prefix), so the backend needs no CORS
+setup.
+
+Other scripts, run from `frontend/`:
+
+| Command | What it does |
+|---|---|
+| `npm test` | Runs the frontend tests (Vitest; the API is mocked, so no backend or API key is needed) |
+| `npm run typecheck` | Type-checks the code (`tsc --noEmit`) |
+| `npm run build` | Type-checks, then builds the production files into `frontend/dist/` |
