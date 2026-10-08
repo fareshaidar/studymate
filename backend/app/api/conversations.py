@@ -1,12 +1,13 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, Response, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.chat import SourceOut
 from app.api.deps import get_db
+from app.api.errors import conversation_not_found
 from app.db.models import Conversation
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -38,7 +39,7 @@ class ConversationDetailOut(ConversationOut):
 def _get_or_404(session: Session, conversation_id: str) -> Conversation:
     conversation = session.get(Conversation, conversation_id)
     if conversation is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conversation not found.")
+        raise conversation_not_found()
     return conversation
 
 

@@ -61,6 +61,23 @@ describe("request", () => {
     );
   });
 
+  it("keeps the backend's error code", async () => {
+    mockFetch(
+      '{"detail":"One or more of the selected documents no longer exist.","code":"document_not_found"}',
+      404,
+    );
+
+    const error = await catchApiError(request("/chat"));
+    expect(error.code).toBe("document_not_found");
+    expect(error.message).toBe("One or more of the selected documents no longer exist.");
+  });
+
+  it("has no code when the backend sends none", async () => {
+    mockFetch('{"detail":"Only PDF files are supported."}', 400);
+
+    expect((await catchApiError(request("/documents"))).code).toBeUndefined();
+  });
+
   it("reads Retry-After on a 503", async () => {
     mockFetch('{"detail":"The model is busy."}', 503, { "Retry-After": "12" });
 

@@ -141,3 +141,19 @@ front-matter flag, so one search per question gives the numbers with the filter 
   `GET /documents` is unchanged, since the count isn't stored: no migrations). The drop zone
   shows "Indexed notes.pdf: text found on 12 of 20 pages." and, when pages are missing, "The
   other pages may be scanned images; their text can't be searched."
+
+## Step 6: error handling
+
+- **A catch-all handler** turns any unexpected exception into a JSON 500, "Something went wrong
+  on the server. Please try again." with code `internal_error`, instead of Starlette's plain
+  text. The log gets the method, path and error type (the server also logs the traceback);
+  never the request body.
+- **A stable `code` next to `detail`** for the 404s the UI acts on: `document_not_found`
+  ("One or more of the selected documents no longer exist.", chat and study tools) and
+  `conversation_not_found` ("This conversation no longer exists."). The messages no longer echo
+  ids from the request; the missing document ids go to the log.
+- **In the UI,** `ApiError` carries the code. On `document_not_found`, chat and the study panels
+  ask `App` to reload the document list, which drops the stale ticks; the notice adds "The
+  document list has been refreshed; please try again." and offers neither Retry nor "Start a
+  new chat" (which wouldn't help). `conversation_not_found` keeps "Start a new chat"; an
+  unexpected 500 shows the friendly message with Retry.

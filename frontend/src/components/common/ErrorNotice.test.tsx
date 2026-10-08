@@ -64,6 +64,44 @@ describe("ErrorNotice", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
+  it("says the list was refreshed when documents are gone, with no Retry or new chat", () => {
+    render(
+      <ErrorNotice
+        error={new ApiError(404, "One or more of the selected documents no longer exist.", undefined, "document_not_found")}
+        onRetry={vi.fn()}
+        onNewChat={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "One or more of the selected documents no longer exist." +
+        "The document list has been refreshed; please try again.",
+    );
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("offers a new chat for a conversation that no longer exists", () => {
+    render(
+      <ErrorNotice
+        error={new ApiError(404, "This conversation no longer exists.", undefined, "conversation_not_found")}
+        onNewChat={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Start a new chat" })).toBeInTheDocument();
+  });
+
+  it("offers Retry for an unexpected server error", () => {
+    render(
+      <ErrorNotice
+        error={new ApiError(500, "Something went wrong on the server. Please try again.", undefined, "internal_error")}
+        onRetry={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
   it("offers no Retry for a 422", () => {
     render(<ErrorNotice error={new ApiError(422, "question: too long")} onRetry={vi.fn()} />);
 

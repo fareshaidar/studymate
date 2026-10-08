@@ -100,7 +100,10 @@ def test_unknown_document_id_is_404(env):
     client, _ = env
     response = client.post("/chat", json={"question": "Hi?", "document_ids": ["nope"]})
     assert response.status_code == 404
-    assert "nope" in response.json()["detail"]
+    assert response.json() == {
+        "detail": "One or more of the selected documents no longer exist.",
+        "code": "document_not_found",
+    }  # the id from the request stays in the log, not the message
 
 
 def test_rate_limit_is_503_with_retry_after(env):
@@ -218,7 +221,10 @@ def test_unknown_conversation_id_is_404(env, Session):
     response = client.post("/chat", json={"question": "Hi?", "conversation_id": "nope"})
 
     assert response.status_code == 404
-    assert "nope" in response.json()["detail"]
+    assert response.json() == {
+        "detail": "This conversation no longer exists.",
+        "code": "conversation_not_found",
+    }
     assert llm.calls == []
     assert count(Session, Message) == 0
 

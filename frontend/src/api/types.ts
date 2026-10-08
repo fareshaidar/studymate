@@ -134,15 +134,23 @@ export interface FlashcardsResponse {
  *
  * status is the HTTP status, or 0 when the backend could not be reached at all.
  * retryAfter (seconds) is set when the backend sent a Retry-After header (503).
+ * code is the backend's stable error code when it sent one (e.g. "document_not_found"),
+ * so the UI can react without parsing the message text.
  */
 export class ApiError extends Error {
   readonly status: number;
   readonly retryAfter?: number;
+  readonly code?: string;
 
-  constructor(status: number, message: string, retryAfter?: number) {
+  constructor(status: number, message: string, retryAfter?: number, code?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.retryAfter = retryAfter;
+    this.code = code;
   }
 }
+
+/** The backend's error codes the UI acts on (backend/app/api/errors.py). */
+export const DOCUMENT_NOT_FOUND = "document_not_found";
+export const CONVERSATION_NOT_FOUND = "conversation_not_found";

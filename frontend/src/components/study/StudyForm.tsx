@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent } from "react";
 
 import { MAX_TOPIC_CHARS } from "../../api/study";
+import { DOCUMENT_NOT_FOUND, type ApiError } from "../../api/types";
 
 /** Props shared by the three study panels. */
 export interface StudyPanelProps {
@@ -8,6 +9,17 @@ export interface StudyPanelProps {
   documentIds: string[];
   /** True when there is nothing to study yet (no PDF uploaded). */
   disabled?: boolean;
+  /** Called when a selected document no longer exists, to reload the document list. */
+  onDocumentsMissing?: () => void;
+}
+
+/** useRequest's onFailure for the study panels: reload the list if documents are gone. */
+export function reloadIfDocumentsMissing(onDocumentsMissing?: () => void) {
+  return (error: ApiError) => {
+    if (error.code === DOCUMENT_NOT_FOUND) {
+      onDocumentsMissing?.();
+    }
+  };
 }
 
 interface StudyFormProps {

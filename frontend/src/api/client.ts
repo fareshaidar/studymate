@@ -46,6 +46,7 @@ export function buildApiError(
   retryAfterHeader: string | null,
 ): ApiError {
   let message = `Request failed (HTTP ${status}).`;
+  let code: string | undefined;
   try {
     const body: unknown = JSON.parse(bodyText);
     if (typeof body === "object" && body !== null && "detail" in body) {
@@ -55,11 +56,13 @@ export function buildApiError(
       } else if (Array.isArray(detail)) {
         message = describeValidationErrors(detail as ValidationItem[]);
       }
+      const bodyCode = (body as { code?: unknown }).code;
+      code = typeof bodyCode === "string" ? bodyCode : undefined;
     }
   } catch {
     // Not JSON: keep the generic message.
   }
-  return new ApiError(status, message, parseRetryAfter(retryAfterHeader));
+  return new ApiError(status, message, parseRetryAfter(retryAfterHeader), code);
 }
 
 /**

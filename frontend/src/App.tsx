@@ -267,6 +267,7 @@ export default function App() {
             noDocuments={noDocuments}
             onConversationStarted={handleConversationStarted}
             onNewChat={handleNewChat}
+            onDocumentsMissing={() => void refreshDocuments()}
           />
         </section>
         <section
@@ -280,6 +281,7 @@ export default function App() {
             documentIds={selectedIds}
             documentCount={documents?.length ?? 0}
             noDocuments={noDocuments}
+            onDocumentsMissing={() => void refreshDocuments()}
           />
         </section>
       </main>

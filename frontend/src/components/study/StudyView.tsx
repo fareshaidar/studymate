@@ -19,10 +19,17 @@ interface StudyViewProps {
   documentCount: number;
   /** True when no PDF is uploaded yet: the tools are disabled with a hint. */
   noDocuments?: boolean;
+  /** Called when a selected document no longer exists, to reload the document list. */
+  onDocumentsMissing?: () => void;
 }
 
 /** The study tools. All three panels stay mounted, so a result survives switching tools. */
-export function StudyView({ documentIds, documentCount, noDocuments = false }: StudyViewProps) {
+export function StudyView({
+  documentIds,
+  documentCount,
+  noDocuments = false,
+  onDocumentsMissing,
+}: StudyViewProps) {
   const [tool, setTool] = useState<Tool>("summary");
 
   const scope =
@@ -52,13 +59,25 @@ export function StudyView({ documentIds, documentCount, noDocuments = false }: S
       </div>
       {noDocuments && <p className="text-gray-600">Upload a PDF in the sidebar to use the study tools.</p>}
       <div hidden={tool !== "summary"}>
-        <SummaryPanel documentIds={documentIds} disabled={noDocuments} />
+        <SummaryPanel
+          documentIds={documentIds}
+          disabled={noDocuments}
+          onDocumentsMissing={onDocumentsMissing}
+        />
       </div>
       <div hidden={tool !== "quiz"}>
-        <QuizPanel documentIds={documentIds} disabled={noDocuments} />
+        <QuizPanel
+          documentIds={documentIds}
+          disabled={noDocuments}
+          onDocumentsMissing={onDocumentsMissing}
+        />
       </div>
       <div hidden={tool !== "flashcards"}>
-        <FlashcardsPanel documentIds={documentIds} disabled={noDocuments} />
+        <FlashcardsPanel
+          documentIds={documentIds}
+          disabled={noDocuments}
+          onDocumentsMissing={onDocumentsMissing}
+        />
       </div>
     </div>
   );

@@ -227,6 +227,29 @@ describe("ChatView", () => {
     expect(onConversationStarted).not.toHaveBeenCalled();
   });
 
+  it("asks for the document list to be reloaded when documents are gone", async () => {
+    vi.mocked(sendChat).mockRejectedValue(
+      new ApiError(404, "One or more of the selected documents no longer exist.", undefined, "document_not_found"),
+    );
+    const onDocumentsMissing = vi.fn();
+    render(
+      <ChatView
+        documentIds={["gone"]}
+        conversationId={null}
+        onConversationStarted={vi.fn()}
+        onNewChat={vi.fn()}
+        onDocumentsMissing={onDocumentsMissing}
+      />,
+    );
+
+    await ask("What is mitosis?");
+
+    expect(await screen.findByText(/document list has been refreshed/)).toBeInTheDocument();
+    expect(onDocumentsMissing).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Start a new chat" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Your question")).toHaveValue("What is mitosis?");
+  });
+
   it("offers no Retry when the daily limit is used up", async () => {
     vi.mocked(sendChat).mockRejectedValue(
       new ApiError(429, "The daily limit for the AI service has been reached. Please try again tomorrow."),

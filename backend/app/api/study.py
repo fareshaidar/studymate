@@ -1,10 +1,11 @@
 from dataclasses import asdict
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_llm_client, get_vector_store
+from app.api.errors import NotFoundError, documents_not_found
 from app.llm.base import LLMClient
 from app.rag.vectorstore import VectorStore
 from app.services.selection import UnknownDocumentError
@@ -82,8 +83,8 @@ class FlashcardsResponse(BaseModel):
     cards: list[FlashcardOut]
 
 
-def _not_found(exc: UnknownDocumentError) -> HTTPException:
-    return HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+def _not_found(exc: UnknownDocumentError) -> NotFoundError:
+    return documents_not_found(exc.missing)
 
 
 @router.post("/summary", response_model=SummaryResponse)

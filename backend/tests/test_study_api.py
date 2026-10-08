@@ -119,7 +119,8 @@ def test_unknown_document_is_404(env, path):
     response = client.post(path, json={"document_ids": ["nope"]})
 
     assert response.status_code == 404
-    assert "nope" in response.json()["detail"]
+    assert response.json()["code"] == "document_not_found"
+    assert "nope" not in response.json()["detail"]
     assert llm.calls == []
 
 

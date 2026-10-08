@@ -1,10 +1,11 @@
 from dataclasses import asdict
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_llm_client, get_vector_store
+from app.api.errors import conversation_not_found, documents_not_found
 from app.llm.base import LLMClient
 from app.rag.vectorstore import VectorStore
 from app.services.chat import Reason, UnknownDocumentError
@@ -66,8 +67,10 @@ def chat(
             store=store,
             llm=llm,
         )
-    except (UnknownDocumentError, UnknownConversationError) as exc:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except UnknownDocumentError as exc:
+        raise documents_not_found(exc.missing) from exc
+    except UnknownConversationError as exc:
+        raise conversation_not_found() from exc
     body = asdict(result)
     # Full passage text is for evaluation only; the snippets in `sources` are what clients get.
     del body["passages"]

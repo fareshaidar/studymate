@@ -6,11 +6,13 @@ import { useRequest } from "../../lib/useRequest";
 import { ErrorNotice } from "../common/ErrorNotice";
 import { NotFoundNotice } from "../common/NotFoundNotice";
 import { ItemSourceLink } from "./ItemSourceLink";
-import { StudyForm, type StudyPanelProps } from "./StudyForm";
+import { reloadIfDocumentsMissing, StudyForm, type StudyPanelProps } from "./StudyForm";
 
 /** A multiple-choice quiz from the ticked documents. */
-export function QuizPanel({ documentIds, disabled = false }: StudyPanelProps) {
-  const { result, pending, failure, run, retry } = useRequest<QuizResponse>();
+export function QuizPanel({ documentIds, disabled = false, onDocumentsMissing }: StudyPanelProps) {
+  const { result, pending, failure, run, retry } = useRequest<QuizResponse>(
+    reloadIfDocumentsMissing(onDocumentsMissing),
+  );
 
   return (
     <div className="space-y-4">

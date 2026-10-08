@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { sendChat } from "../../api/chat";
-import { ApiError, type ChatResponse } from "../../api/types";
+import { ApiError, DOCUMENT_NOT_FOUND, type ChatResponse } from "../../api/types";
 import { ErrorNotice } from "../common/ErrorNotice";
 import { MessageInput } from "./MessageInput";
 import { MessageList, type ChatMessage } from "./MessageList";
@@ -20,6 +20,8 @@ interface ChatViewProps {
   /** Called once, with the id the backend gave the new conversation. */
   onConversationStarted: (id: string) => void;
   onNewChat: () => void;
+  /** Called when a selected document no longer exists, to reload the document list. */
+  onDocumentsMissing?: () => void;
 }
 
 /** A failed send: what went wrong and the question to retry. */
@@ -44,6 +46,7 @@ export function ChatView({
   noDocuments = false,
   onConversationStarted,
   onNewChat,
+  onDocumentsMissing,
 }: ChatViewProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [draft, setDraft] = useState("");
@@ -92,6 +95,10 @@ export function ChatView({
       const error = err instanceof ApiError ? err : new ApiError(0, "Something went wrong.");
       setFailed({ id: nextId.current++, error, question });
       setPending(false);
+      if (error.code === DOCUMENT_NOT_FOUND) {
+        // Reloading the list drops the stale ticks, so sending again just works.
+        onDocumentsMissing?.();
+      }
       return;
     }
 

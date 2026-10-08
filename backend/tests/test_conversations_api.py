@@ -105,4 +105,7 @@ def test_delete_removes_the_conversation_and_its_messages(client, Session):
 def test_unknown_conversation_is_404(client, method):
     response = getattr(client, method)("/conversations/nope")
     assert response.status_code == 404
-    assert response.json()["detail"] == "Conversation not found."
+    assert response.json() == {
+        "detail": "This conversation no longer exists.",
+        "code": "conversation_not_found",
+    }

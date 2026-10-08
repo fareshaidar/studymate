@@ -73,6 +73,20 @@ describe("SummaryPanel", () => {
     expect(screen.getByText(/couldn't find usable material/)).toBeInTheDocument();
   });
 
+  it("asks for the document list to be reloaded when documents are gone", async () => {
+    vi.mocked(getSummary).mockRejectedValue(
+      new ApiError(404, "One or more of the selected documents no longer exist.", undefined, "document_not_found"),
+    );
+    const onDocumentsMissing = vi.fn();
+    render(<SummaryPanel documentIds={["gone"]} onDocumentsMissing={onDocumentsMissing} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Summarise" }));
+
+    expect(await screen.findByText(/document list has been refreshed/)).toBeInTheDocument();
+    expect(onDocumentsMissing).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+  });
+
   it("offers Retry after a failure", async () => {
     vi.mocked(getSummary)
       .mockRejectedValueOnce(new ApiError(502, "The AI service failed."))

@@ -12,8 +12,11 @@ export interface Failure {
  * State for one "press a button, wait, show the result" request, shared by the
  * three study panels: the latest result, whether it is running, and the last
  * failure, plus `retry` to run the last request again.
+ *
+ * `onFailure` is called once per failure, e.g. to reload the document list when
+ * the backend says a selected document no longer exists.
  */
-export function useRequest<T>() {
+export function useRequest<T>(onFailure?: (error: ApiError) => void) {
   const [result, setResult] = useState<T | null>(null);
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
@@ -32,6 +35,7 @@ export function useRequest<T>() {
     } catch (err) {
       const error = err instanceof ApiError ? err : new ApiError(0, "Something went wrong.");
       setFailure({ id: ++failureCount.current, error });
+      onFailure?.(error);
     } finally {
       setPending(false);
     }

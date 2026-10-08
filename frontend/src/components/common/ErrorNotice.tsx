@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 
-import type { ApiError } from "../../api/types";
+import { DOCUMENT_NOT_FOUND, type ApiError } from "../../api/types";
 
 interface ErrorNoticeProps {
   error: ApiError;
   /** Shown as a Retry button when retrying can help. */
   onRetry?: () => void;
-  /** Shown as "Start a new chat" on a 404 (the conversation or a document is gone). */
+  /** Shown as "Start a new chat" on a 404 for a conversation that no longer exists. */
   onNewChat?: () => void;
 }
 
@@ -31,7 +31,11 @@ export function ErrorNotice({ error, onRetry, onNewChat }: ErrorNoticeProps) {
     return () => clearTimeout(timer);
   }, [secondsLeft]);
 
-  const notFound = error.status === 404;
+  // A deleted document: the chat or study panel has already asked App to reload the
+  // document list, which drops the stale ticks, so sending again is all it takes.
+  const documentsGone = error.code === DOCUMENT_NOT_FOUND;
+  // "Start a new chat" fixes a missing conversation, but not a missing document.
+  const offerNewChat = error.status === 404 && !documentsGone;
   // No Retry where retrying fails the same way: 404, 422 (invalid request) and 429
   // (the AI service's daily limit is used up until tomorrow).
   const noRetryStatuses = [404, 422, 429];
@@ -40,6 +44,9 @@ export function ErrorNotice({ error, onRetry, onNewChat }: ErrorNoticeProps) {
   return (
     <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900">
       <p>{error.message}</p>
+      {documentsGone && (
+        <p className="mt-1">The document list has been refreshed; please try again.</p>
+      )}
       {secondsLeft > 0 && <p className="mt-1">Busy: try again in {secondsLeft} s.</p>}
       <div className="mt-2 flex gap-2">
         {canRetry && (
@@ -52,7 +59,7 @@ export function ErrorNotice({ error, onRetry, onNewChat }: ErrorNoticeProps) {
             Retry
           </button>
         )}
-        {notFound && onNewChat && (
+        {offerNewChat && onNewChat && (
           <button type="button" className="rounded border border-red-700 px-3 py-1" onClick={onNewChat}>
             Start a new chat
           </button>

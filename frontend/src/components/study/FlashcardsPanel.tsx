@@ -6,11 +6,13 @@ import { useRequest } from "../../lib/useRequest";
 import { ErrorNotice } from "../common/ErrorNotice";
 import { NotFoundNotice } from "../common/NotFoundNotice";
 import { ItemSourceLink } from "./ItemSourceLink";
-import { StudyForm, type StudyPanelProps } from "./StudyForm";
+import { reloadIfDocumentsMissing, StudyForm, type StudyPanelProps } from "./StudyForm";
 
 /** Flashcards from the ticked documents, shown one at a time. */
-export function FlashcardsPanel({ documentIds, disabled = false }: StudyPanelProps) {
-  const { result, pending, failure, run, retry } = useRequest<FlashcardsResponse>();
+export function FlashcardsPanel({ documentIds, disabled = false, onDocumentsMissing }: StudyPanelProps) {
+  const { result, pending, failure, run, retry } = useRequest<FlashcardsResponse>(
+    reloadIfDocumentsMissing(onDocumentsMissing),
+  );
 
   return (
     <div className="space-y-4">

@@ -5,11 +5,13 @@ import { formatPageRanges } from "../../lib/pages";
 import { useRequest } from "../../lib/useRequest";
 import { ErrorNotice } from "../common/ErrorNotice";
 import { NotFoundNotice } from "../common/NotFoundNotice";
-import { StudyForm, type StudyPanelProps } from "./StudyForm";
+import { reloadIfDocumentsMissing, StudyForm, type StudyPanelProps } from "./StudyForm";
 
 /** A summary of the ticked documents, optionally focused on one topic. */
-export function SummaryPanel({ documentIds, disabled = false }: StudyPanelProps) {
-  const { result, pending, failure, run, retry } = useRequest<SummaryResponse>();
+export function SummaryPanel({ documentIds, disabled = false, onDocumentsMissing }: StudyPanelProps) {
+  const { result, pending, failure, run, retry } = useRequest<SummaryResponse>(
+    reloadIfDocumentsMissing(onDocumentsMissing),
+  );
 
   return (
     <div className="space-y-4">
