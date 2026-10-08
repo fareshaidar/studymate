@@ -40,6 +40,12 @@ class RateLimitError(LLMError):
         self.daily_quota = daily_quota
 
 
+class InvalidLLMOutputError(LLMError):
+    """The model replied, but not in the structure we asked for, even after one retry."""
+
+    user_message = "The AI service returned an answer we couldn't use. Please try again."
+
+
 class ProviderError(LLMError):
     """Any other provider failure: bad key, unknown model, server error, timeout, blocked answer."""
 
