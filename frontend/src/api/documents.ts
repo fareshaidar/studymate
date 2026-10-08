@@ -10,3 +10,8 @@ export function getHealth(): Promise<Health> {
 export function listDocuments(): Promise<DocumentInfo[]> {
   return request<DocumentInfo[]>("/documents");
 }
+
+/** DELETE /documents/{id}: removes the row, its chunks and the stored PDF. */
+export function deleteDocument(id: string): Promise<void> {
+  return request<void>(`/documents/${encodeURIComponent(id)}`, { method: "DELETE" });
+}

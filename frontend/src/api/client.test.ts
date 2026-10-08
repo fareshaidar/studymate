@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { OFFLINE_MESSAGE, request } from "./client";
+import { errorMessage, OFFLINE_MESSAGE, request } from "./client";
 import { ApiError } from "./types";
 
 /** Replace the global fetch with one that returns a single canned response. */
@@ -84,5 +84,14 @@ describe("request", () => {
     const error = await catchApiError(request("/health"));
     expect(error.status).toBe(0);
     expect(error.message).toBe(OFFLINE_MESSAGE);
+  });
+});
+
+describe("errorMessage", () => {
+  it("uses an ApiError's message and hides anything else", () => {
+    expect(errorMessage(new ApiError(400, "Only PDF files are supported."))).toBe(
+      "Only PDF files are supported.",
+    );
+    expect(errorMessage(new Error("internal stack detail"))).toBe("Something went wrong.");
   });
 });

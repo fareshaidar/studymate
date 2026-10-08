@@ -8,4 +8,5 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  localStorage.clear(); // saved selections must not leak between tests
 });

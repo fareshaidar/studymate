@@ -3,6 +3,11 @@ import { ApiError } from "./types";
 
 export const OFFLINE_MESSAGE = "Cannot reach the StudyMate backend. Is it running?";
 
+/** A user-facing message for anything a promise rejected with. */
+export function errorMessage(error: unknown): string {
+  return error instanceof ApiError ? error.message : "Something went wrong.";
+}
+
 /** One item of FastAPI's 422 validation error list. */
 interface ValidationItem {
   loc?: (string | number)[];

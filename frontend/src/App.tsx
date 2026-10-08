@@ -1,103 +1,53 @@
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import { getHealth, listDocuments } from "./api/documents";
-import { ApiError, type DocumentInfo } from "./api/types";
-import { uploadDocument, type UploadProgress } from "./api/upload";
-
-type BackendState = "checking" | "online" | "offline";
-
-/** Get a user-facing message from anything a promise rejected with. */
-function errorMessage(error: unknown): string {
-  return error instanceof ApiError ? error.message : "Something went wrong.";
-}
+import { errorMessage } from "./api/client";
+import { listDocuments } from "./api/documents";
+import type { DocumentInfo } from "./api/types";
+import { BackendStatus } from "./components/common/BackendStatus";
+import { DocumentPanel } from "./components/documents/DocumentPanel";
+import { NEW_CONVERSATION_KEY, useSelection } from "./lib/selection";
 
 /**
- * Temporary smoke screen for step 1: proves the proxy, the error handling and
- * the upload progress work end to end. Replaced by the real layout in later steps.
+ * The whole page: a sidebar for documents and a main area.
+ *
+ * The document list and the selection live here, not in the sidebar, because
+ * the chat and study tools (later steps) need them too.
  */
 export default function App() {
-  const [backend, setBackend] = useState<BackendState>("checking");
-  const [documents, setDocuments] = useState<DocumentInfo[]>([]);
-  const [progress, setProgress] = useState<UploadProgress | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<DocumentInfo[] | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
+  // Only the not-yet-sent chat exists until conversations arrive in step 5.
+  const [selectedIds, setSelectedIds] = useSelection(NEW_CONVERSATION_KEY, documents);
 
-  async function refresh(): Promise<void> {
+  const refreshDocuments = useCallback(async (): Promise<void> => {
     try {
-      await getHealth();
-      setBackend("online");
       setDocuments(await listDocuments());
+      setListError(null);
     } catch (err) {
-      setBackend("offline");
-      setError(errorMessage(err));
+      setListError(errorMessage(err));
     }
-  }
-
-  useEffect(() => {
-    void refresh();
   }, []);
 
-  async function handleFile(event: ChangeEvent<HTMLInputElement>): Promise<void> {
-    const file = event.target.files?.[0];
-    event.target.value = ""; // allow picking the same file again later
-    if (!file) {
-      return;
-    }
-    setError(null);
-    try {
-      await uploadDocument(file, setProgress);
-      await refresh();
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setProgress(null);
-    }
-  }
+  useEffect(() => {
+    void refreshDocuments();
+  }, [refreshDocuments]);
 
   return (
-    <main className="mx-auto max-w-2xl space-y-6 p-6">
-      <h1 className="text-2xl font-semibold">StudyMate (connection check)</h1>
-
-      <p>
-        Backend:{" "}
-        <span className={backend === "online" ? "text-green-700" : "text-red-700"}>{backend}</span>
-      </p>
-
-      <label className="block">
-        <span className="mb-1 block font-medium">Upload a PDF</span>
-        <input
-          type="file"
-          accept="application/pdf"
-          disabled={progress !== null}
-          onChange={(event) => void handleFile(event)}
+    <div className="flex min-h-screen bg-gray-50 text-gray-900">
+      <aside className="w-80 shrink-0 space-y-4 border-r border-gray-200 bg-white p-4">
+        <h1 className="text-xl font-bold">StudyMate</h1>
+        <DocumentPanel
+          documents={documents}
+          listError={listError}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+          onDocumentsChanged={refreshDocuments}
         />
-      </label>
-
-      {progress?.phase === "uploading" && (
-        <p>
-          Uploading… {Math.round((progress.loaded / progress.total) * 100)}%
-        </p>
-      )}
-      {progress?.phase === "indexing" && <p>Indexing… (this can take a minute)</p>}
-      {error && (
-        <p role="alert" className="text-red-700">
-          {error}
-        </p>
-      )}
-
-      <section>
-        <h2 className="mb-2 text-lg font-medium">Documents</h2>
-        {documents.length === 0 ? (
-          <p className="text-gray-600">No documents yet.</p>
-        ) : (
-          <ul className="list-disc pl-6">
-            {documents.map((doc) => (
-              <li key={doc.id}>
-                {doc.filename} ({doc.page_count} pages)
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-    </main>
+      </aside>
+      <main className="flex-1 space-y-4 p-6">
+        <BackendStatus />
+        <p className="text-gray-600">Chat and study tools will appear here.</p>
+      </main>
+    </div>
   );
 }
