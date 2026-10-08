@@ -5,6 +5,8 @@ Nothing is stored: every request reads the chunks, calls the LLM and returns the
 
 import logging
 import random
+import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
@@ -94,12 +96,18 @@ def summarize(
     session: Session,
     store: VectorStore,
     llm: LLMClient,
+    clock: Callable[[], float] = time.monotonic,
 ) -> SummaryResult:
-    """Summarise documents with map-reduce, within a fixed budget of LLM calls.
+    """Summarise documents with map-reduce, within a budget of LLM calls and of time.
 
     Map: each batch of chunks (in page order) is summarised on its own.
     Reduce: the partial summaries are combined in one more call.
     Material that fits in one batch needs a single call.
+
+    Time budget (study_max_seconds): once it is used up, no further batch call is
+    started; the batches done so far are combined and the result is marked truncated.
+    A call already running is never cut off, so the overrun is at most one batch call
+    plus the combine. `clock` is a parameter so tests can make time pass instantly.
     """
     filenames = resolve_documents(session, document_ids)  # raises UnknownDocumentError
     chunks = _summary_chunks(filenames, topic, store)
@@ -121,21 +129,37 @@ def summarize(
             system=SUMMARY_SYSTEM_PROMPT,
         )
         llm_calls = 1
+        done = batches
     else:
-        partials = [
-            llm.generate(
-                build_summary_prompt(_numbered(batch, filenames), topic, part=(i, len(batches))),
-                system=SUMMARY_SYSTEM_PROMPT,
+        start = clock()
+        partials = []
+        for i, batch in enumerate(batches, start=1):
+            # The first batch always runs, so there is something to show.
+            if partials and clock() - start > settings.study_max_seconds:
+                logger.info(
+                    "study kind=summary stopped after %d of %d batches: time budget",
+                    len(partials),
+                    len(batches),
+                )
+                truncated = True
+                break
+            partials.append(
+                llm.generate(
+                    build_summary_prompt(_numbered(batch, filenames), topic, part=(i, len(batches))),
+                    system=SUMMARY_SYSTEM_PROMPT,
+                )
             )
-            for i, batch in enumerate(batches, start=1)
-        ]
-        summary = llm.generate(build_combine_prompt(partials, topic), system=SUMMARY_SYSTEM_PROMPT)
-        llm_calls = len(batches) + 1
+        done = batches[: len(partials)]
+        if len(partials) == 1:
+            summary, llm_calls = partials[0], 1  # nothing to combine
+        else:
+            summary = llm.generate(build_combine_prompt(partials, topic), system=SUMMARY_SYSTEM_PROMPT)
+            llm_calls = len(partials) + 1
 
     logger.info(
         "study kind=summary chunks=%d batches=%d llm_calls=%d truncated=%s",
         len(chunks),
-        len(batches),
+        len(done),
         llm_calls,
         truncated,
     )
@@ -144,7 +168,8 @@ def summarize(
         summary=summary.strip(),
         truncated=truncated,
         llm_calls=llm_calls,
-        pages=_pages_covered(batches, filenames),
+        # Only the batches actually summarised: the "Based on" pages must be true.
+        pages=_pages_covered(done, filenames),
     )
 
 

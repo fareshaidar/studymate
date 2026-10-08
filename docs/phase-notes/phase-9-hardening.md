@@ -173,3 +173,16 @@ front-matter flag, so one search per question gives the numbers with the filter 
   only after reviewing a report-only run. That run on the real data (3 documents, 3 PDFs,
   746 chunks) found 0 temporary uploads, 0 orphan PDFs and 0 orphan chunks, and changed
   nothing.
+
+## Step 8: study time budget
+
+- **The summary** is the only study tool that can take long: up to 7 batch calls plus a combine,
+  one after another, each up to 60 s plus retries. Quiz and flashcards make at most 2 calls.
+- **The rule** (`study_max_seconds`, default 180): before each batch call after the first, the
+  summary checks how long it has been running; past the budget it starts no more batch calls,
+  combines what is done (no combine call if only one batch finished) and marks the result
+  truncated. A running call is never cut off, so the overrun is at most one batch call plus the
+  combine. The "Based on" pages list only the batches actually summarised.
+- **The UI warning** now reads "…to stay within the AI call or time limit."
+- **Tests** use a fake clock that advances only when a fake LLM call "takes" time: 0 Gemini
+  calls, instant runs.

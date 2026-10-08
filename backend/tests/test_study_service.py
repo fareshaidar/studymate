@@ -111,6 +111,77 @@ def test_call_cap_spreads_batches_and_sets_truncated(session, store, monkeypatch
     assert "Page 03" in llm.calls[0][0] and "Page 07" in llm.calls[1][0]
 
 
+class FakeClock:
+    """Time that passes only when a fake LLM call 'takes' it, so tests run instantly."""
+
+    def __init__(self):
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+class SlowFakeLLM(FakeLLMClient):
+    """Each call takes `seconds` on the fake clock."""
+
+    def __init__(self, clock, seconds, **kwargs):
+        super().__init__(**kwargs)
+        self.clock, self.seconds = clock, seconds
+
+    def generate(self, prompt, system=None):
+        self.clock.now += self.seconds
+        return super().generate(prompt, system)
+
+
+def summarise_timed(session, store, llm, clock):
+    return summarize(None, None, session=session, store=store, llm=llm, clock=clock)
+
+
+def test_time_budget_stops_new_batches_and_combines_what_is_done(session, store, monkeypatch):
+    add_document(session, store, "doc1", "ga.pdf", page_texts(8))
+    monkeypatch.setattr(settings, "study_batch_chars", 130)  # 4 batches: pages 1-2, 3-4, 5-6, 7-8
+    monkeypatch.setattr(settings, "study_max_seconds", 100)
+    clock = FakeClock()
+    llm = SlowFakeLLM(clock, seconds=60, replies=["part A", "part B", "Combined."])
+
+    result = summarise_timed(session, store, llm, clock)
+
+    # Batch 1 ends at 60 s, batch 2 starts (60 <= 100) and ends at 120 s: batch 3 isn't started.
+    assert len(llm.calls) == 3  # 2 batches + the combine
+    assert result.summary == "Combined."
+    assert result.truncated is True
+    assert result.llm_calls == 3
+    assert result.pages[0].pages == [1, 2, 3, 4]  # only the batches actually summarised
+
+
+def test_a_single_finished_batch_needs_no_combine_call(session, store, monkeypatch):
+    add_document(session, store, "doc1", "ga.pdf", page_texts(6))
+    monkeypatch.setattr(settings, "study_batch_chars", 130)  # 3 batches
+    monkeypatch.setattr(settings, "study_max_seconds", 30)
+    clock = FakeClock()
+    llm = SlowFakeLLM(clock, seconds=60, replies=["  Only part.  "])
+
+    result = summarise_timed(session, store, llm, clock)
+
+    assert len(llm.calls) == 1
+    assert result.summary == "Only part."
+    assert (result.truncated, result.llm_calls) == (True, 1)
+    assert result.pages[0].pages == [1, 2]
+
+
+def test_within_the_time_budget_every_batch_runs(session, store, monkeypatch):
+    add_document(session, store, "doc1", "ga.pdf", page_texts(6))
+    monkeypatch.setattr(settings, "study_batch_chars", 130)  # 3 batches
+    clock = FakeClock()
+    llm = SlowFakeLLM(clock, seconds=10, replies=["part A", "part B", "part C", "Combined."])
+
+    result = summarise_timed(session, store, llm, clock)  # default budget: 180 s
+
+    assert len(llm.calls) == 4
+    assert result.truncated is False
+    assert result.pages[0].pages == [1, 2, 3, 4, 5, 6]
+
+
 def test_cap_never_exceeded_with_default_settings(session, store, monkeypatch):
     add_document(session, store, "doc1", "ga.pdf", page_texts(40))
     monkeypatch.setattr(settings, "study_batch_chars", 70)  # 1 chunk per batch, 40 batches

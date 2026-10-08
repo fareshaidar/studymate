@@ -38,7 +38,7 @@ function SummaryResult({ summary }: { summary: SummaryResponse }) {
     <article className="space-y-3 rounded-lg bg-white p-4 shadow-sm">
       {summary.truncated && (
         <p className="rounded border border-amber-300 bg-amber-50 p-2 text-sm">
-          Partial summary: part of the material was skipped to stay within the AI call limit. Pick
+          Partial summary: part of the material was skipped to stay within the AI call or time limit. Pick
           fewer documents or a topic for a complete one.
         </p>
       )}

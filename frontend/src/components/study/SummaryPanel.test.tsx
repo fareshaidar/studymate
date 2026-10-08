@@ -58,7 +58,11 @@ describe("SummaryPanel", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Summarise" }));
 
-    expect(await screen.findByText(/Partial summary/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        /Partial summary: part of the material was skipped to stay within the AI call or time limit\./,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("shows the backend's message when nothing usable was found", async () => {

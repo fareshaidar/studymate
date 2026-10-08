@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     study_batch_chars: int = 12000
     # Passages a quiz or flashcard set is made from.
     study_max_passages: int = 10
+    # A summary starts no new batch call after this long (it returns a partial summary).
+    study_max_seconds: int = 180
 
     # Largest PDF the upload endpoint accepts.
     max_upload_mb: int = 50

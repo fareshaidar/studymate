@@ -38,7 +38,7 @@ only; never reword or use the held-out items for choosing settings.
 Phase 9 progress is recorded in docs/phase-notes/phase-9-hardening.md.
 Evaluation PDFs are git-ignored; never commit them or backend/evaluation/results/.
 Notes are in docs/phase-notes/.
-Current: Phase 9 (hardening), steps 1-7 done; next step 8 (study time budget).
+Current: Phase 9 (hardening), steps 1-8 done; next step 9 (input limits).
 startup_cleanup stays False until I say otherwise (report-only run found nothing).
 
 ## Roadmap (one phase at a time, never start the next without my OK)
