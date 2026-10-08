@@ -13,6 +13,11 @@ try_*.py
 backend/data/
 *.db
 
+# Evaluation: third-party PDFs (never committed), run output and the LLM cache
+backend/evaluation/datasets/documents/
+backend/evaluation/results/
+backend/evaluation/.cache/
+
 # Node (for the frontend later)
 node_modules/
 dist/

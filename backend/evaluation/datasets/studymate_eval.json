@@ -1,0 +1,520 @@
+{
+  "documents": [
+    {
+      "id": "skylab",
+      "file": "19740024203.pdf",
+      "sha256": "06127251e5a9ab466c299983df44b2e3eabb67fa039360693ed8750b4702385c",
+      "title": "MSFC Skylab Crew Systems Mission Evaluation (NASA TM X-64825), NASA Marshall Space Flight Center, August 1974",
+      "source": "NASA Technical Reports Server, document 19740024203",
+      "licence": "NASA technical memorandum (US government work); licence to be confirmed by the project owner",
+      "question_pages": "25-34 (introduction, configuration, water system), 73-89 (personal hygiene, sleep, start of food), 353-361 (twin pole sail)"
+    },
+    {
+      "id": "camera",
+      "file": "19770007900.pdf",
+      "sha256": "3f8e60d1e47343be5c92c557e92cc56adff93ea4fc881285542826b6e7b7feb6",
+      "title": "Space Telescope Optical Telescope Assembly/Scientific Instruments, Phase B, Volume IIA: Focal Plane Camera Final Report (NASA-CR-150117), Itek Corp. for NASA MSFC, April 1976",
+      "source": "NASA Technical Reports Server, document 19770007900",
+      "licence": "NASA contractor report; licence to be confirmed by the project owner",
+      "question_pages": "7 (introduction), 64-83 (preliminary design: overview, structure, thermal control, filters, shutter and calibration, mounting); prose pages only, figure pages in between skipped"
+    },
+    {
+      "id": "ipcc",
+      "file": "IPCC_AR6_SYR_SPM.pdf",
+      "sha256": "3e347d04913c8fcc180c10efec372681554f3d735a7f0b2e6c7d991ddbb29c11",
+      "title": "IPCC, 2023: Summary for Policymakers. In: Climate Change 2023: Synthesis Report. Contribution of Working Groups I, II and III to the Sixth Assessment Report of the Intergovernmental Panel on Climate Change. IPCC, Geneva, Switzerland",
+      "source": "IPCC AR6 Synthesis Report, Summary for Policymakers (PDF)",
+      "licence": "(c) IPCC 2023; short extracts may be reproduced without authorization provided the complete source is clearly indicated",
+      "question_pages": "9-12 (introduction, A.1 and A.2 current status and trends), 30 (C.1 near-term responses)"
+    }
+  ],
+  "items": [
+    {
+      "id": "sky-01",
+      "type": "answerable",
+      "question": "Roughly how much living and working volume did Skylab give its crews?",
+      "reference_answer": "Over 10,000 cubic feet of living and experimental workspace.",
+      "document": "skylab",
+      "pages": [25],
+      "evidence": ["cubic-feet of living and experimental workspace"]
+    },
+    {
+      "id": "sky-02",
+      "type": "answerable",
+      "question": "How many docking ports was the Multiple Docking Adapter originally built with?",
+      "reference_answer": "Five: one axial and four radial.",
+      "document": "skylab",
+      "pages": [26],
+      "evidence": ["equipped with five docking ports, one axial and four radial"]
+    },
+    {
+      "id": "sky-03",
+      "type": "answerable",
+      "question": "What made it possible to fit the workshop with an active food freezer?",
+      "reference_answer": "Launching the workshop dry on a Saturn V gave more payload capability and more liberal weight allowances, so an active food freezer/chiller system could be added.",
+      "document": "skylab",
+      "pages": [28],
+      "evidence": ["add an active food freezer/chiller system thereby enhancing the quality of food"]
+    },
+    {
+      "id": "sky-04",
+      "type": "answerable",
+      "question": "How was drinking water stored in the Orbital Workshop?",
+      "reference_answer": "In ten stainless steel tanks spaced around the forward compartment, each holding at least 600 pounds of usable water, with a metal bellows pressurised by nitrogen to push the water out.",
+      "document": "skylab",
+      "pages": [30],
+      "evidence": ["consisted of ten stainless steel water tanks evenly spaced"]
+    },
+    {
+      "id": "sky-05",
+      "type": "answerable",
+      "question": "What minimum iodine level was needed for the water to be safe to drink?",
+      "reference_answer": "0.5 ppm or more; the crew checked with a colour comparator that it stayed above 2 ppm.",
+      "document": "skylab",
+      "pages": [33],
+      "evidence": ["iodine concentration was to have been 0.5 ppm or greater"]
+    },
+    {
+      "id": "sky-06",
+      "type": "answerable",
+      "question": "What was the job of the cation cartridge in the water system?",
+      "reference_answer": "It held ion exchange resin that removed metal ions from the water flowing through it.",
+      "document": "skylab",
+      "pages": [34],
+      "evidence": ["remove metal ions from the water as it passed through the resin bed"]
+    },
+    {
+      "id": "sky-07",
+      "type": "answerable",
+      "question": "What did the astronauts dislike most about the shower?",
+      "reference_answer": "The power module: its low air flow made cleaning up the shower water take too long, so the whole procedure was too time consuming.",
+      "document": "skylab",
+      "pages": [75],
+      "evidence": ["The primary complaint was the inadequacy of the power module"]
+    },
+    {
+      "id": "sky-08",
+      "type": "answerable",
+      "question": "How many soap bars did the first crew actually get through?",
+      "reference_answer": "Only one bar for the entire mission, although eleven were provided for it.",
+      "document": "skylab",
+      "pages": [75],
+      "evidence": ["they used only one bar for the entire mission"]
+    },
+    {
+      "id": "sky-09",
+      "type": "answerable",
+      "question": "Why did the crews go through more tissues than planned?",
+      "reference_answer": "Because of nasal congestion in zero gravity; the third crew ran out in some dispensers and used utility wipes instead.",
+      "document": "skylab",
+      "pages": [80],
+      "evidence": ["Due to zero-g nasal congestion"]
+    },
+    {
+      "id": "sky-10",
+      "type": "answerable",
+      "question": "How did the crew stop the fabric louvres of the light baffles from collapsing?",
+      "reference_answer": "They cut triangular pieces of cardboard, put them into the louvre stiffeners and taped them in place.",
+      "document": "skylab",
+      "pages": [87],
+      "evidence": ["triangular shaped pieces of cardboard"]
+    },
+    {
+      "id": "sky-11",
+      "type": "answerable",
+      "question": "What was the thermal sail made of?",
+      "reference_answer": "Aluminized mylar coated with S-13G paint, as a 22 by 24 foot rectangle.",
+      "document": "skylab",
+      "pages": [353, 355],
+      "evidence": ["aluminized mylar coated with S-13g"]
+    },
+    {
+      "id": "sky-12",
+      "type": "answerable",
+      "question": "In neutral buoyancy training, what stood in for the sail material and why?",
+      "reference_answer": "Half-inch nylon netting, chosen to minimise drag while moving the sail through the water.",
+      "document": "skylab",
+      "pages": [358],
+      "evidence": ["nylon netting"]
+    },
+    {
+      "id": "sky-13",
+      "type": "answerable",
+      "question": "How long did engineers have to come up with the sail concept before the first crew launched?",
+      "reference_answer": "Eleven days, from the discovery of the failures on the SL-1 launch day to the SL-2 launch on May 25.",
+      "document": "skylab",
+      "pages": [361],
+      "evidence": ["In eleven days, from the discovery of the system failures"]
+    },
+    {
+      "id": "cam-01",
+      "type": "answerable",
+      "question": "Which telescope was the focal plane camera designed for?",
+      "reference_answer": "The 2.4 meter Space Telescope.",
+      "document": "camera",
+      "pages": [7],
+      "evidence": ["Focal Plane Camera for the 2.4 meter Space Telescope"]
+    },
+    {
+      "id": "cam-02",
+      "type": "answerable",
+      "question": "Why does the camera include its own on-axis pick-off mirror?",
+      "reference_answer": "The SECO detector and filter mechanism are too bulky to sit in the high-quality centre of the focal plane, so the mirror folds that central part to one side, leaving the other instruments access.",
+      "document": "camera",
+      "pages": [64],
+      "evidence": ["integral on-axis pick-off mirror to fold the central portion"]
+    },
+    {
+      "id": "cam-03",
+      "type": "answerable",
+      "question": "Why was electronic exposure control preferred over a mechanical shutter?",
+      "reference_answer": "Gating voltages in the detector avoids the reliability questions of a precision mechanical shutter.",
+      "document": "camera",
+      "pages": [64],
+      "evidence": ["preferable to the introduction of a precision mechanical shutter"]
+    },
+    {
+      "id": "cam-04",
+      "type": "answerable",
+      "question": "How heavy is the focal plane camera and how much power does it use on average?",
+      "reference_answer": "About 310 pounds, with an average power of 97 watts.",
+      "document": "camera",
+      "pages": [67],
+      "evidence": ["Weight - 310 Pounds"]
+    },
+    {
+      "id": "cam-05",
+      "type": "answerable",
+      "question": "Why is the detector mounting bulkhead aluminium rather than invar?",
+      "reference_answer": "The camera submodule is mounted to it, and aluminium gives a good heat conduction path away from the submodule.",
+      "document": "camera",
+      "pages": [66],
+      "evidence": ["made from aluminum and the camera submodule is actually mounted to this bulkhead"]
+    },
+    {
+      "id": "cam-06",
+      "type": "answerable",
+      "question": "What working fluid is used in the camera's heat pipes?",
+      "reference_answer": "Ammonia.",
+      "document": "camera",
+      "pages": [75],
+      "evidence": ["Working Fluid - ammonia"]
+    },
+    {
+      "id": "cam-07",
+      "type": "answerable",
+      "question": "How many positions does each filter wheel have, and what turns it?",
+      "reference_answer": "Eight positions per wheel, each wheel indexed by a stepper motor through a 200:1 reduction.",
+      "document": "camera",
+      "pages": [75],
+      "evidence": ["Each wheel has eight positions"]
+    },
+    {
+      "id": "cam-08",
+      "type": "answerable",
+      "question": "How much can a moving filter wheel disturb the telescope's pointing?",
+      "reference_answer": "Only marginally and momentarily: about 0.009 arcsecond of body pointing, plus about 0.004 arcsecond of vibration that damps out within seconds.",
+      "document": "camera",
+      "pages": [80],
+      "evidence": ["marginally-significant disturbance to the line-of-sight"]
+    },
+    {
+      "id": "cam-09",
+      "type": "answerable",
+      "question": "What positions can the capping shutter be set to?",
+      "reference_answer": "Three: open for imaging, open for standard star calibration, and closed for internal calibration.",
+      "document": "camera",
+      "pages": [81],
+      "evidence": ["thus has three positions"]
+    },
+    {
+      "id": "cam-10",
+      "type": "answerable",
+      "question": "How does an astronaut secure the camera module once it is in place?",
+      "reference_answer": "By tightening the four captive screws one after another with a ratchet wrench, after registration pins centre the module and latches hold it.",
+      "document": "camera",
+      "pages": [83],
+      "evidence": ["tightens the four screws successively with a ratchet wrench"]
+    },
+    {
+      "id": "ipcc-01",
+      "type": "answerable",
+      "question": "How many levels of confidence does the IPCC's calibrated language distinguish?",
+      "reference_answer": "Five: very low, low, medium, high and very high.",
+      "document": "ipcc",
+      "pages": [9],
+      "evidence": ["uses five qualifiers to express a level of confidence"]
+    },
+    {
+      "id": "ipcc-02",
+      "type": "answerable",
+      "question": "What probability range does 'very likely' stand for in IPCC reports?",
+      "reference_answer": "90-100%.",
+      "document": "ipcc",
+      "pages": [9],
+      "evidence": ["very likely 90–100%"]
+    },
+    {
+      "id": "ipcc-03",
+      "type": "answerable",
+      "question": "What was the concentration of CO2 in the atmosphere in 2019?",
+      "reference_answer": "410 parts per million, higher than at any time in at least 2 million years.",
+      "document": "ipcc",
+      "pages": [10],
+      "evidence": ["atmospheric CO2 concentrations (410 parts per million)"]
+    },
+    {
+      "id": "ipcc-04",
+      "type": "answerable",
+      "question": "How large were global net greenhouse gas emissions in 2019?",
+      "reference_answer": "About 59 ± 6.6 GtCO2-eq, about 12% higher than in 2010 and 54% higher than in 1990.",
+      "document": "ipcc",
+      "pages": [10],
+      "evidence": ["59 ± 6.6 GtCO2-eq"]
+    },
+    {
+      "id": "ipcc-05",
+      "type": "answerable",
+      "question": "What share of household emissions comes from the highest-emitting 10% of households?",
+      "reference_answer": "34-45% of global consumption-based household GHG emissions, while the bottom 50% contribute 13-15%.",
+      "document": "ipcc",
+      "pages": [11],
+      "evidence": ["The 10% of households with the highest per capita emissions contribute 34–45%"]
+    },
+    {
+      "id": "ipcc-06",
+      "type": "answerable",
+      "question": "How many people live in places that are highly vulnerable to climate change?",
+      "reference_answer": "Approximately 3.3 to 3.6 billion people.",
+      "document": "ipcc",
+      "pages": [11],
+      "evidence": ["Approximately 3.3 to 3.6 billion people"]
+    },
+    {
+      "id": "ipcc-07",
+      "type": "answerable",
+      "question": "About how many people face severe water scarcity for part of the year?",
+      "reference_answer": "Roughly half of the world's population.",
+      "document": "ipcc",
+      "pages": [12],
+      "evidence": ["Roughly half of the world’s population currently experience severe water scarcity"]
+    },
+    {
+      "id": "ipcc-08",
+      "type": "answerable",
+      "question": "What does the report mean by climate resilient development?",
+      "reference_answer": "Development that integrates adaptation and mitigation to advance sustainable development for all.",
+      "document": "ipcc",
+      "pages": [30],
+      "evidence": ["Climate resilient development integrates adaptation and mitigation"]
+    },
+    {
+      "id": "fu-01",
+      "type": "follow_up",
+      "history": [
+        {"role": "user", "content": "What was wrong with the Skylab shower?"},
+        {"role": "assistant", "content": "The main complaint was the weak power module: its low air flow made cleaning up the water take too long [1]."}
+      ],
+      "question": "How much water did it use each time?",
+      "expected_standalone": "How much water did one shower on Skylab use?",
+      "reference_answer": "Six pounds per shower, which all crews found adequate.",
+      "document": "skylab",
+      "pages": [77],
+      "evidence": ["six-pounds of water, per shower"]
+    },
+    {
+      "id": "fu-02",
+      "type": "follow_up",
+      "history": [
+        {"role": "user", "content": "What was used to purify Skylab's drinking water?"},
+        {"role": "assistant", "content": "Iodine was used as a biocide in the water tanks [1]."}
+      ],
+      "question": "What concentration were the tanks charged to at the start?",
+      "expected_standalone": "To what iodine concentration were Skylab's water tanks initially charged?",
+      "reference_answer": "12 ppm, expected to fall to at most 6 ppm by the time the water was used.",
+      "document": "skylab",
+      "pages": [32],
+      "evidence": ["initially charged with iodine until the concentration was 12-ppm"]
+    },
+    {
+      "id": "fu-03",
+      "type": "follow_up",
+      "history": [
+        {"role": "user", "content": "What was the twin pole sail on Skylab?"},
+        {"role": "assistant", "content": "A thermal shield of coated mylar held out on two 55-foot poles to shade the workshop from the sun [1]."}
+      ],
+      "question": "Who put it up, and on which mission?",
+      "expected_standalone": "Who deployed Skylab's twin pole sail, and during which mission?",
+      "reference_answer": "Two EVA crewmen (EV-1 and EV-2) installed it during the first EVA of SL-3.",
+      "document": "skylab",
+      "pages": [353, 358],
+      "evidence": ["installed during the first EVA of SL-3", "accomplished by two crewmen"]
+    },
+    {
+      "id": "fu-04",
+      "type": "follow_up",
+      "history": [
+        {"role": "user", "content": "How is the focal plane camera's detector cooled?"},
+        {"role": "assistant", "content": "Thermo-electric coolers cool the photocathode to 270 K [1]."}
+      ],
+      "question": "Why does it need to be that cold?",
+      "expected_standalone": "Why is the photocathode of the focal plane camera's detector cooled?",
+      "reference_answer": "So that the camera has a wide dynamic range and a high signal-to-noise ratio at the video output.",
+      "document": "camera",
+      "pages": [64],
+      "evidence": ["wide dynamic range and high signal-to-noise ratio"]
+    },
+    {
+      "id": "fu-05",
+      "type": "follow_up",
+      "history": [
+        {"role": "user", "content": "Which lamps does the camera's internal calibration use?"},
+        {"role": "assistant", "content": "A tungsten lamp and a high pressure hydrogen lamp [1]."}
+      ],
+      "question": "How long does the second one last?",
+      "expected_standalone": "How long does the high pressure hydrogen calibration lamp of the focal plane camera last?",
+      "reference_answer": "Usually a few hundred hours.",
+      "document": "camera",
+      "pages": [82],
+      "evidence": ["The life of the lamp is usually a few hundred hours"]
+    },
+    {
+      "id": "fu-06",
+      "type": "follow_up",
+      "history": [
+        {"role": "user", "content": "How much has the world warmed according to the IPCC synthesis report?"},
+        {"role": "assistant", "content": "Global surface temperature in 2011-2020 was about 1.1°C above 1850-1900 [1]."}
+      ],
+      "question": "Was it more over land or over the sea?",
+      "expected_standalone": "Was the warming in 2011-2020 larger over land or over the ocean?",
+      "reference_answer": "Over land: about 1.59°C, against 0.88°C over the ocean.",
+      "document": "ipcc",
+      "pages": [10],
+      "evidence": ["larger increases over land"]
+    },
+    {
+      "id": "fu-07",
+      "type": "follow_up",
+      "history": [
+        {"role": "user", "content": "How fast is the sea level rising now?"},
+        {"role": "assistant", "content": "The average rate reached 3.7 mm per year between 2006 and 2018 [1]."}
+      ],
+      "question": "And how much has it gone up in total since 1901?",
+      "expected_standalone": "How much did global mean sea level rise in total between 1901 and 2018?",
+      "reference_answer": "About 0.20 m (0.15 to 0.25 m).",
+      "document": "ipcc",
+      "pages": [11],
+      "evidence": ["Global mean sea level increased by 0.20"]
+    },
+    {
+      "id": "fu-08",
+      "type": "follow_up",
+      "history": [
+        {"role": "user", "content": "What does the IPCC report mean by the near term?"},
+        {"role": "assistant", "content": "The period until 2040 [1]."}
+      ],
+      "question": "And the long term?",
+      "expected_standalone": "How does the IPCC synthesis report define the long term?",
+      "reference_answer": "The period beyond 2040.",
+      "document": "ipcc",
+      "pages": [9],
+      "evidence": ["The long term is defined as the period beyond 2040"]
+    },
+    {
+      "id": "off-01",
+      "type": "unanswerable_off_topic",
+      "question": "How do I keep a sourdough starter alive?",
+      "reference_answer": "None of the documents is about baking."
+    },
+    {
+      "id": "off-02",
+      "type": "unanswerable_off_topic",
+      "question": "Who won the 2018 FIFA World Cup?",
+      "reference_answer": "None of the documents is about football."
+    },
+    {
+      "id": "off-03",
+      "type": "unanswerable_off_topic",
+      "question": "What is the average time complexity of quicksort?",
+      "reference_answer": "None of the documents is about algorithms."
+    },
+    {
+      "id": "off-04",
+      "type": "unanswerable_off_topic",
+      "question": "How does self-attention work in a transformer model?",
+      "reference_answer": "None of the documents is about machine learning."
+    },
+    {
+      "id": "off-05",
+      "type": "unanswerable_off_topic",
+      "question": "What is the capital city of Australia?",
+      "reference_answer": "None of the documents is about geography trivia."
+    },
+    {
+      "id": "off-06",
+      "type": "unanswerable_off_topic",
+      "question": "When is a player allowed to castle in chess?",
+      "reference_answer": "None of the documents is about chess."
+    },
+    {
+      "id": "off-07",
+      "type": "unanswerable_off_topic",
+      "question": "How do I write a list comprehension in Python?",
+      "reference_answer": "None of the documents is about programming."
+    },
+    {
+      "id": "off-08",
+      "type": "unanswerable_off_topic",
+      "question": "Which painter created The Starry Night?",
+      "reference_answer": "None of the documents is about art."
+    },
+    {
+      "id": "on-01",
+      "type": "unanswerable_on_topic",
+      "question": "How much did the Skylab program cost in total, in dollars?",
+      "reference_answer": "The crew systems report gives no program cost (no dollar amounts in the text)."
+    },
+    {
+      "id": "on-02",
+      "type": "unanswerable_on_topic",
+      "question": "How and when did Skylab come back down to Earth?",
+      "reference_answer": "The 1974 report predates Skylab's re-entry and doesn't describe it."
+    },
+    {
+      "id": "on-03",
+      "type": "unanswerable_on_topic",
+      "question": "What did the Skylab astronauts usually eat for breakfast?",
+      "reference_answer": "The report assesses food equipment, not the food or menus (it says food items are not assessed)."
+    },
+    {
+      "id": "on-04",
+      "type": "unanswerable_on_topic",
+      "question": "In which year was the Space Telescope finally launched?",
+      "reference_answer": "The camera report is a 1976 design study and doesn't give a launch date."
+    },
+    {
+      "id": "on-05",
+      "type": "unanswerable_on_topic",
+      "question": "What was the estimated cost of building the focal plane camera?",
+      "reference_answer": "The camera report gives no cost figures."
+    },
+    {
+      "id": "on-06",
+      "type": "unanswerable_on_topic",
+      "question": "What does the IPCC summary say about the 2022 floods in Pakistan?",
+      "reference_answer": "The summary doesn't discuss specific national events; Pakistan only appears in the author affiliations."
+    },
+    {
+      "id": "on-07",
+      "type": "unanswerable_on_topic",
+      "question": "How high should sea walls in New York be built to cope with sea level rise?",
+      "reference_answer": "The summary gives no city-specific engineering guidance."
+    },
+    {
+      "id": "on-08",
+      "type": "unanswerable_on_topic",
+      "question": "Which single country emits the most CO2 each year?",
+      "reference_answer": "The summary doesn't rank individual countries by emissions."
+    }
+  ]
+}
