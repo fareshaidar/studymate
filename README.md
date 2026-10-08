@@ -61,6 +61,33 @@ their intended standalone question.
   - the right page would be kept for 37/39 instead of 34/39;
   - 8 passages would have shown the answer passage for 3 of the 4 tuning false refusals.
 
+### top_k 8 experiment
+
+A full answer run with 8 passages instead of 5, set for that evaluation run only. **The app
+default stays at 5.**
+
+| | Tuning (n=55) top 5 | Tuning top 8 | Held-out (n=10) top 5 | Held-out top 8 |
+|---|---|---|---|---|
+| Answerable questions wrongly refused | 2/31 | 0/31 | 1/6 | 1/6 |
+| Follow-ups wrongly refused | 2/8 | 1/8 | – | – |
+| Off-topic refused | 8/8 | 8/8 | 2/2 | 2/2 |
+| On-topic, not in the documents, refused | 8/8 | 8/8 | 2/2 | 2/2 |
+| Answers with ≥1 correct citation | 34/35 | 36/38 | 5/5 | 5/5 |
+| Cited sources on expected pages | 36/42 | 39/47 | 6/6 | 6/6 |
+| Mean prompt characters per answer | 6,775 | 10,247 | 7,012 | 10,913 |
+
+- **Effect:** the 3 false refusals whose answer passage had ranked 7th–8th are now answered
+  correctly. No unanswerable question was answered.
+- **Side effects:**
+  - one previously cited answer (sky-01) is now correct but uncited;
+  - 2 more cited sources fall outside the expected pages.
+- **Cost:** about 59% more passages and 51–56% more prompt text per answer.
+- **Caveats:**
+  - the change was proposed after tracing these same misses;
+  - the held-out set cannot confirm it: its one false refusal is out of reach, and nothing
+    else changed;
+  - the gain rests on 3 questions.
+
 **Caveats**
 - The faithfulness judge is the same model family as the answerer, so the faithfulness score is
   biased upwards.

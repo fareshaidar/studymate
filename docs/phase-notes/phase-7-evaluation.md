@@ -76,6 +76,7 @@ studymate_eval.json ─► dataset.py (schema, SHA-256 check) ─► harness.tem
 .\.venv\Scripts\python -m evaluation.run_answer_eval                   # the rest; cached replies are free
 .\.venv\Scripts\python -m evaluation.run_answer_eval --fake-llm        # plumbing check, no key
 .\.venv\Scripts\python -m evaluation.run_answer_eval --no-llm          # retrieval-layer refusals only
+.\.venv\Scripts\python -m evaluation.run_answer_eval --top-k 8         # override top_k for this run only; files tagged -topk8
 ```
 
 Use `--documents DIR` if the PDFs live elsewhere. The baseline reports are copied unchanged in
@@ -158,14 +159,58 @@ Answerable questions plus follow-ups; follow-ups are searched as their expected 
   false refusals on the tuning set. The 2 held-out off-topic questions score about 0.50, so they
   are refused at both 0.55 and 0.60 and can't confirm the change.
 - **`retrieval_top_k` 8:** an expected page is kept for 3 more tuning questions (37/39), for
-  about 60% more prompt text. It would have put the answer passage in front of the model for
-  3 of the 4 tuning false refusals (sky-04, sky-13, fu-06); whether the model then answers needs
-  a rerun.
+  about 60% more prompt text. A full answer run with this value is described in
+  "top_k 8 experiment" below; the default stays at 5.
 - **Front-matter filtering:** a check for tables of contents and lists of figures. Raising
   `min_alnum_ratio` to 0.6 would drop the table of contents (0.57) but not the list of figures
   (0.77).
 - After any change, rerun both evaluations and check the held-out rows, which weren't used to
   choose it.
+
+## top_k 8 experiment
+
+Run with `run_answer_eval --top-k 8 --max-calls 150`. The option overrides `retrieval_top_k`
+for that evaluation process only. **The app default stays at 5.**
+
+- **Calls:** 89 real calls and 30 cache hits, with no errors and nothing skipped.
+- **Baseline:** the 19:11 run, re-run from the reply cache with `--top-k 5 --max-calls 0` to get
+  passage counts and prompt sizes. That made 0 real calls and reproduced all 65 records.
+
+| | Tuning (n=55) top_k 5 | Tuning top_k 8 | Held-out (n=10) top_k 5 | Held-out top_k 8 |
+|---|---|---|---|---|
+| Answerable false refusals | 2/31 | 0/31 | 1/6 | 1/6 |
+| Follow-up false refusals | 2/8 | 1/8 | – | – |
+| Off-topic refused | 8/8 | 8/8 | 2/2 | 2/2 |
+| On-topic unanswerable refused | 8/8 | 8/8 | 2/2 | 2/2 |
+| Answers with ≥1 correct citation | 34/35 | 36/38 | 5/5 | 5/5 |
+| Cited sources on expected pages | 36/42 | 39/47 | 6/6 | 6/6 |
+| Supported claims (judge) | 46/46 | 53/53 | 5/5 | 5/5 |
+| Mean passages per answer call | 4.92 | 7.81 | 5.00 | 8.00 |
+| Mean prompt characters per answer call | 6,775 | 10,247 | 7,012 | 10,913 |
+
+- **The traced false refusals:**
+  - **Now answered:** sky-04, sky-13 and fu-06, whose answer passages had ranked 7th–8th. All 3
+    answers match the reference answer and cite the expected page.
+  - **Still declined:** fu-01 (answer passage not in the top 60) and user-06 (not in the
+    top 10). The trace predicted all 5 outcomes.
+- **No unanswerable question was answered.** All 20 are still refused, each by the same layer
+  as before: off-topic 5 by retrieval and 5 by the model; on-topic 10 by the model.
+- **Side effects on the tuning set:**
+  - **sky-01** is now answered correctly but with no citation, while at top_k 5 it was cited.
+  - **Off-page citations** go from 6 to 8: ipcc-06 adds page 37 next to the correct page 11,
+    and cam-02 adds page 7 but still has no correct citation. Some may be valid pages missing
+    from the ground truth.
+- **Cost:** about 59% more passages per answer call, and 51% (tuning) to 56% (held-out) more
+  prompt characters.
+- **Caveats:**
+  - **Proposed after tracing the misses:** top_k 8 was proposed after tracing these same misses,
+    so their recovery was predicted rather than independent evidence.
+  - **Not confirmed by the held-out set:** its only false refusal (user-06) is beyond the top 10,
+    and every held-out number is unchanged.
+  - **Small sample:** the gain rests on 3 questions, each from one run of a non-deterministic
+    model.
+  - **Faithfulness:** the judge, the same model family as the answerer, rates both settings
+    100%, so it can't tell them apart.
 
 ## Limitations
 
