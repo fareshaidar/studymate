@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db, get_llm_client, get_vector_store
 from app.llm.base import LLMClient
 from app.rag.vectorstore import VectorStore
-from app.services.chat import Reason, UnknownDocumentError, answer_question
+from app.services.chat import Reason, UnknownDocumentError
+from app.services.conversations import UnknownConversationError, chat_in_conversation
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -16,6 +17,8 @@ class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     # Limit the search to these documents; empty or missing means all documents.
     document_ids: list[str] | None = None
+    # Continue this conversation; missing means start a new one.
+    conversation_id: str | None = None
 
     @field_validator("question", mode="before")
     @classmethod
@@ -38,6 +41,9 @@ class ChatResponse(BaseModel):
     found: bool
     reason: Reason
     sources: list[SourceOut]
+    conversation_id: str
+    # The standalone question used for retrieval; null if the original question was used.
+    rewritten_question: str | None
 
 
 @router.post("", response_model=ChatResponse)
@@ -52,9 +58,14 @@ def chat(
     LLM failures are turned into friendly 5xx responses by the handlers in app/api/errors.py.
     """
     try:
-        result = answer_question(
-            request.question, request.document_ids, session=session, store=store, llm=llm
+        conversation_id, result = chat_in_conversation(
+            request.question,
+            request.document_ids,
+            request.conversation_id,
+            session=session,
+            store=store,
+            llm=llm,
         )
-    except UnknownDocumentError as exc:
+    except (UnknownDocumentError, UnknownConversationError) as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
-    return asdict(result)
+    return {**asdict(result), "conversation_id": conversation_id}
