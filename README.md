@@ -4,8 +4,9 @@ A RAG-based study assistant. Upload your lecture notes and PDFs, ask questions,
 and get answers with citations to the exact document and page. It also
 generates summaries, quizzes, and flashcards from your material.
 
-> Status: Phases 0–8 are done: the backend (ingestion, cited chat, conversations, study tools,
-> evaluation) and the React frontend. Next: Phase 9, hardening.
+> Status: Phases 0–9 are done: the backend (ingestion, cited chat, conversations, study tools,
+> evaluation), the React frontend, and hardening (see [Hardening](#hardening-phase-9)).
+> Next: Phase 10, packaging.
 
 ## Features
 
@@ -120,10 +121,11 @@ Retrieval only (no LLM calls), at threshold 0.55 and top_k 8. Full report:
 | Kept passages that are front matter | 11/312 | 0/312 | 7/248 | 0/248 | 0/48 | 0/48 |
 | Questions with a front-matter passage | 9/39 | 0/39 | 5/31 | 0/31 | 0/6 | 0/6 |
 
-- **Rewording costs more than anything the filter changes.** The right page is in the top 8 for
-  37/39 tuning questions as worded in the dataset, but for only 22/31 of the same questions
-  reworded. The dataset's wording flatters retrieval. The user's own Skylab question (rw-sky-04)
-  is still missed: its answer passage isn't in the top 60.
+- **Rewording costs more than anything the filter changes.** The right page reaches the top 8
+  for **95% (37/39)** of tuning questions as worded in the dataset, but only **71% (22/31)** when
+  the same questions are reworded naturally. The dataset's wording, written while reading the
+  pages, flatters retrieval; 71% is the more honest figure for real students. The user's own
+  Skylab question (rw-sky-04) is still missed: its answer passage isn't in the top 60.
 - **The filter removes only front matter.** It flags 20 chunks, all on the Skylab report's
   contents and list pages (13–23), none on a page any question expects. It frees 11 of 312 kept
   passages on the tuning set without losing any expected page.
@@ -148,9 +150,10 @@ Retrieval only (no LLM calls), at threshold 0.55 and top_k 8. Full report:
 
 ## Future work
 
-Retrieval ideas aimed at the gap shown by the reworded questions (22/31 in the top 8 against
-37/39 as originally worded). Each would need the same before/after measurement, on the tuning,
-reworded and held-out sets separately.
+Retrieval ideas aimed at the gap shown by the reworded questions: the right page reaches the top
+8 for 95% (37/39) of questions as worded in the dataset, but 71% (22/31) when reworded. Each
+idea would need the same before/after measurement, on the tuning, reworded and held-out sets
+separately, before becoming a default.
 
 - **Keyword or hybrid search:** combine the embedding search with keyword matching (e.g. BM25),
   so exact terms like "drinking water" or "OWS" count even when the overall meaning is close to
@@ -161,6 +164,34 @@ reworded and held-out sets separately.
 - **Smaller or section-aware chunks:** 1800-character chunks can mix a section heading, a figure
   and several topics, which blurs their embedding. Splitting at section boundaries or using
   smaller chunks could help; the Phase 7 chunk-size sweep was within noise at n = 39.
+
+## Hardening (Phase 9)
+
+What a user now sees when something goes wrong (details in
+[the Phase 9 notes](docs/phase-notes/phase-9-hardening.md)):
+
+- **No API key:** an amber banner explains how to add `GEMINI_API_KEY` to `backend/.env` and
+  restart the backend. Uploading and browsing still work.
+- **Backend stopped:** a red banner, re-checked every 30 s, when the tab regains focus, or with
+  "Check now".
+- **Daily AI quota used up:** a clear "try again tomorrow" message, with no pointless Retry.
+  A short per-minute limit still shows a countdown.
+- **Too-large PDF:** refused at once, before any upload (limit 50 MB).
+- **Empty, password-protected or damaged PDF:** a clear message instead of a server error.
+- **After an upload:** "Indexed notes.pdf: text found on 12 of 20 pages", and a note when some
+  pages are scanned images.
+- **A very long summary:** stops starting new AI calls after 180 s and returns a partial summary,
+  marked as such.
+- **A document deleted in another tab:** the document list refreshes itself and the message
+  says to try again. Unexpected server errors show a friendly message, never internal details.
+
+Two optional behaviours are off by default; turn them on in `backend/.env`, then restart the
+backend:
+
+| Setting | Default | What it does |
+|---|---|---|
+| `EXCLUDE_FRONT_MATTER=true` | off | Leave tables of contents and lists of figures out of answers and study tools. Measured: no gain in finding the right page, so off. |
+| `STARTUP_CLEANUP=true` | off | At startup, delete leftovers of interrupted uploads (old temporary files, PDFs and chunks with no document). A report-only run on real data found nothing to delete. |
 
 ## Tech stack
 

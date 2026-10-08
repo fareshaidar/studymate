@@ -1,7 +1,25 @@
-# Phase 9: Hardening (in progress)
+# Phase 9: Hardening
 
-Started as a record of each step while the phase runs; the wrap-up step completes it with the
-remaining steps, how the pieces connect, and 5 interview questions with answers.
+Making StudyMate behave well when things go wrong: retrieval that holds up to real wording,
+clear messages for missing keys, quotas, bad files and deleted data, and safe handling of
+uploads, leftovers and the database. Every step was planned, approved by the owner, tested
+without Gemini calls (0 in the whole phase), and committed on its own.
+
+| Step | Commit(s) | What |
+|---|---|---|
+| 1 | `d1b6b02` | `retrieval_top_k` 8 by default; baselines relabelled as measured at top_k 5 |
+| 2a–2d | `ae5c324`, `1c2461e`, `6675e5b`, `801ed6e`, `bef041f` | Front-matter rule, 31 reworded questions, filter measured off/on, decision: off |
+| 3 | `5ad2b5c` | Missing-key banner (`/health` `llm_configured`); daily quota → 429, no Retry |
+| 4 | `373db4a` | Oversized uploads refused from `Content-Length`; batched Chroma adds |
+| 5 | `c61caaf` | Empty, password-protected, damaged PDFs → 422; "indexed N of M pages"; Windows file-handle fix |
+| 6 | `38a5a19` | Catch-all JSON 500; error codes; UI refreshes the list for deleted documents |
+| 7 | `9cbd7e5` | Startup cleanup of leftovers (off by default; report-only run found nothing) |
+| 8 | `f604b04` | Summary time budget (180 s), partial summary instead of waiting |
+| 9 | `f87d2b7` | Limits on document ids, id length and file name length |
+| 10 | `2ca74b2` | SQLite foreign keys, WAL, busy timeout; no more orphan messages |
+
+Tests: 324 backend tests before Phase 8, 331 after it, **413** after Phase 9; frontend 159 →
+**178**.
 
 ## Step 1: retrieval_top_k 8 by default (`d1b6b02`)
 
@@ -212,3 +230,127 @@ front-matter flag, so one search per question gives the numbers with the filter 
   (`studymate.db.bak`); all of these are under the git-ignored `backend/data/`.
 - **Tests** use temporary database files only; the real database was confirmed untouched after
   the test run (no WAL files, same size and time as the backup).
+
+## How the pieces connect
+
+**A request's path through the new protections:**
+
+```
+browser ── UploadDropzone: refuses > max_upload_mb before sending (limit from /health)
+   │
+   ▼
+FastAPI ── upload_limit middleware: 413 from Content-Length, before the body is read
+   │      request models: ids ≤ 200 and ≤ 64 characters, else 422 (no search, no LLM call)
+   ▼
+endpoint ── ingest: unreadable PDF → IngestError → 422 with a clear reason
+   │        chat/study: unknown documents or conversation → NotFoundError(code) → 404
+   │        LLM errors → 503 + Retry-After (per minute) / 429 (daily quota) / 502 / 500
+   │        anything else → catch-all → 500 "Something went wrong…" (code internal_error)
+   ▼
+UI ── ApiError {status, message, retryAfter, code}
+      → ErrorNotice: Retry / countdown / "Start a new chat" / nothing, by status and code
+      → document_not_found: chat and study panels ask App to reload the document list
+```
+
+**Startup** (`main.lifespan`): create missing tables → read-only `PRAGMA foreign_key_check`,
+logging (never fixing) old violating rows → startup cleanup, only if `startup_cleanup` is on
+(find, then remove exactly what was found).
+
+**Every database connection** (`make_engine`): foreign keys on, WAL, 10 s busy timeout. With
+foreign keys on, a chat answer for a conversation deleted meanwhile can't be saved: the service
+rolls back and the API answers 404 `conversation_not_found`.
+
+**`/health`** (polled every 30 s, on tab focus and on "Check now") feeds three things in the UI:
+the red offline banner, the amber missing-key banner (`llm_configured`), and the upload size
+check (`max_upload_mb`).
+
+**Retrieval** (`retrieve`): search 2 × top_k (16), drop unusable chunks (diagrams; front matter
+only if `exclude_front_matter` is on), keep the best 8 above `min_similarity`. The evaluation
+records the front-matter flag per chunk, so one search gives the numbers with the filter off
+and on.
+
+## Settings after Phase 9
+
+| Setting | Default | Change in Phase 9 |
+|---|---|---|
+| `retrieval_top_k` | 8 | was 5 (step 1) |
+| `exclude_front_matter` | `False` | new; measured, kept off by the owner (step 2) |
+| `max_upload_mb` | 50 | unchanged; now also enforced early and in the UI (step 4) |
+| `startup_cleanup` | `False` | new; off until the owner turns it on (step 7) |
+| `study_max_seconds` | 180 | new (step 8) |
+| `min_similarity` | 0.55 | unchanged; 0.60 still awaits the owner's decision |
+
+## Design tradeoffs
+
+- **A decision rule fixed before measuring.** The front-matter filter only removed junk, but
+  the rule said "on only if expected page kept or hit@8 improves on a tuning set", and neither
+  did. Following the rule, even when the result is disappointing, is what keeps the evaluation
+  from turning into tuning-to-the-answer. The setting stays available.
+- **Honest numbers over flattering ones.** The reworded set shows 71% (22/31) instead of 95%
+  (37/39) for the right page in the top 8. It is reported next to the original numbers, and the
+  held-out items were never reworded or used to choose.
+- **Restart over re-reading `.env`.** A key added to `.env` needs a backend restart. Re-reading
+  the file while the key is missing would have avoided that, but the owner preferred the plainer
+  behaviour and a banner that says exactly what to do.
+- **429 for the daily quota.** It isn't "temporarily unavailable" (503): it won't come back in
+  seconds, so the UI shows no Retry. The per-minute limit keeps 503 with a countdown.
+- **Shorten long file names, refuse oversized files.** A long name isn't the user's fault; a
+  300 MB file can't be processed, so it is refused before it is sent.
+- **Open PDFs from bytes.** It costs memory (at most 50 MB per upload) but means PyMuPDF never
+  holds a file open, which on Windows had turned a clean 422 into a 500.
+- **Report, never repair, the database.** Old rows that break a foreign key are logged, not
+  deleted; the startup cleanup never changes a row and deletes nothing if the database can't be
+  read or is empty. Destructive actions need the owner's explicit decision.
+- **Middleware for the size check.** FastAPI reads the whole multipart body before the
+  endpoint or its dependencies run, so only a middleware sees the request before the file
+  arrives. The byte count while saving stays as the exact check.
+
+## Interview questions
+
+1. **Q: After raising top_k to 8, a real question was still refused. How did you find out why,
+   and why not just raise top_k again?**
+   A: I ran the app's own `retrieve()` read-only on the live index, with no LLM calls, and
+   printed the 16 passages it searched and the 8 it kept. The answer passage wasn't in the top
+   60, so the model was right to refuse: the problem was retrieval. Comparing with the
+   evaluation, the only difference was wording: the dataset asked "…stored in the Orbital
+   Workshop?", the user asked "…on the Skylab orbital workshop?", and "Skylab" appears on nearly
+   every page, which pulls in general passages. More top_k wouldn't reach rank 60, and costs
+   prompt size. Instead I added 31 natural rewordings of the tuning questions: the right page
+   reaches the top 8 for 95% as originally worded but 71% reworded. That gap is the honest
+   finding, and it points to keyword search or a re-ranker, not a bigger top_k.
+
+2. **Q: Your front-matter filter removed only junk. Why is it switched off?**
+   A: Because I wrote down the rule for switching it on before measuring: on only if, on the
+   tuning sets, "expected page kept" doesn't drop, it or hit@8 improves somewhere, and no flagged
+   chunk is on an expected page. The audit was clean (20 chunks, all contents and list pages,
+   none expected), and it freed 11 of 312 passage slots, but expected-page-kept and hit@8 didn't
+   change: where it helped, the answer was already inside the top 8. Switching it on anyway
+   would mean moving the goalposts after seeing the result. It stays as a setting, and an answer
+   evaluation (which costs Gemini calls) could still show a benefit.
+
+3. **Q: FastAPI reads the whole upload before your endpoint runs. How do you refuse a 300 MB
+   file early?**
+   A: Three layers. The browser checks `file.size` against the limit from `/health` and refuses
+   before sending anything. On the server, a small HTTP middleware looks at `Content-Length` for
+   `POST /documents` and answers 413 before the body is read; a live test showed a 60 MB upload
+   refused in about 2 ms with 0 bytes sent. The exact byte count while copying the file stays as
+   the backstop, for requests without `Content-Length`. The middleware allows 1 MB for the
+   multipart wrapping so a file exactly at the limit isn't refused by mistake.
+
+4. **Q: How do you make a startup cleanup that deletes files safe?**
+   A: By separating finding from deleting and making every rule narrow. `find_leftovers()` only
+   reads and returns a list; `remove_leftovers()` deletes exactly that list. It only matches
+   exact names (`upload-<32 hex>.pdf` older than an hour, `<32 hex>.pdf` with no database row) and
+   chunks with no row; it never changes the database. If the database can't be read, nothing is
+   deleted; if it has no documents, only old temporary files go, because an empty table more
+   likely means a reset database than "delete everything". It ships off by default, and before
+   anyone turns it on, a report-only run on the real data showed it would delete nothing.
+
+5. **Q: Tell me about a bug your tests found.**
+   A: A damaged PDF upload on Windows returned 500 instead of the intended 422. Ingest correctly
+   raised "not a valid PDF", but the cleanup then failed with "file in use". When PyMuPDF fails
+   while opening a file by name, it keeps the file handle until garbage collection, and Windows
+   can't delete an open file. The fix had two parts: open PDFs from their bytes, so no handle is
+   ever held, and log a failed cleanup instead of raising it, so cleanup can never turn a clear
+   answer into a 500. I confirmed it live: damaged and empty uploads both return 422 and leave no
+   temporary file.

@@ -14,7 +14,7 @@ Environment: Windows, PowerShell, Python 3.11, venv at backend/.venv.
 - Frontend later: React + Vite + TypeScript + Tailwind
 
 ## Done so far
-Phases 0 to 8 are complete: ingestion API (upload/list/delete), LLM client
+Phases 0 to 9 are complete: ingestion API (upload/list/delete), LLM client
 with retries and an optional fallback model, POST /chat with a similarity
 threshold, citation validation, a reason field, the orphan-chunk fix and the
 diagram-noise filter; conversations (stored messages, follow-up rewriting with
@@ -28,19 +28,25 @@ cache and call cap; baseline reports in docs/evaluation/); the frontend (fronten
 React + Vite + TypeScript + Tailwind, a Vite dev proxy that strips /api instead of
 CORS, GET /documents/{id}/file for "Open PDF at page n", per-conversation document
 selection in localStorage, chat, conversations, study tools; Vitest + Testing
-Library tests with a mocked API; run with npm run dev, npm test, npm run typecheck).
+Library tests with a mocked API; run with npm run dev, npm test, npm run typecheck);
+hardening (Phase 9: front-matter rule and 31 reworded tuning questions measured
+retrieval-only; missing-key banner and llm_configured/max_upload_mb in /health;
+daily quota as 429; early 413 from Content-Length and batched Chroma adds; 422s for
+empty, password-protected and damaged PDFs and text_page_count on upload; catch-all
+JSON 500 and error codes; startup cleanup; summary time budget; input limits;
+SQLite foreign keys, WAL and busy timeout; recap in docs/phase-notes/phase-9-hardening.md).
 retrieval_top_k is 8 since Phase 9 (was 5). The front-matter filter
 (exclude_front_matter) was measured in Phase 9 and stays off by my decision: no
 gain in expected page kept or hit@8 (37/39 tuning, 22/31 reworded, 5/6 held-out).
 min_similarity 0.60 still awaits my decision. The dataset's "reworded" section (31
 rewordings of answerable tuning items; rw-sky-04 is my own wording) is tuning-side
 only; never reword or use the held-out items for choosing settings.
-Phase 9 progress is recorded in docs/phase-notes/phase-9-hardening.md.
+startup_cleanup stays False until I say otherwise (report-only run found nothing).
+study_max_seconds is 180. Never commit backend/data/ (it holds studymate.db, its
+-wal/-shm files and my backup studymate.db.bak).
 Evaluation PDFs are git-ignored; never commit them or backend/evaluation/results/.
 Notes are in docs/phase-notes/.
-Current: Phase 9 (hardening), steps 1-10 done; next step 11 (wrap-up: Phase 9 note
-with 5 interview Q&As, README, CLAUDE.md).
-startup_cleanup stays False until I say otherwise (report-only run found nothing).
+Next: Phase 10 (packaging).
 
 ## Roadmap (one phase at a time, never start the next without my OK)
 5 Conversation, 6 Study tools, 7 Evaluation, 8 Frontend, 9 Hardening,
