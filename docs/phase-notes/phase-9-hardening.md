@@ -157,3 +157,19 @@ front-matter flag, so one search per question gives the numbers with the filter 
   document list has been refreshed; please try again." and offers neither Retry nor "Start a
   new chat" (which wouldn't help). `conversation_not_found` keeps "Start a new chat"; an
   unexpected 500 shows the friendly message with Retry.
+
+## Step 7: startup cleanup (off by default)
+
+- **What it deletes, only:** files in `data/uploads/` named exactly `upload-<32 hex>.pdf` and
+  older than an hour (interrupted uploads); files named exactly `<32 hex>.pdf` whose id has no
+  `documents` row (orphan PDFs); Chroma chunks whose `document_id` has no row (orphan chunks).
+- **What it never touches:** the database (it only reads the ids), any file or folder whose
+  name doesn't match exactly, and anything outside `data/uploads/` and the chunk collection.
+- **Safety rules:** an unreadable database means nothing is deleted; a database with no
+  documents means only old temporary uploads go (PDFs and chunks are left alone, since an
+  empty table more likely means a reset database); a vector store error skips the chunks but
+  not the files. `find_leftovers()` only reads, `remove_leftovers()` deletes exactly that list.
+- **Off by default** (`startup_cleanup = False`), by the owner's decision: it is turned on
+  only after reviewing a report-only run. That run on the real data (3 documents, 3 PDFs,
+  746 chunks) found 0 temporary uploads, 0 orphan PDFs and 0 orphan chunks, and changed
+  nothing.

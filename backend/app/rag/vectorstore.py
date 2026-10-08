@@ -109,6 +109,14 @@ class VectorStore:
         # Chroma doesn't promise any order for `get`, so sort explicitly.
         return sorted(chunks, key=lambda c: c.chunk_index)
 
+    def chunk_counts(self) -> dict[str, int]:
+        """How many chunks each document id has in the store (reads metadata only)."""
+        result = self._collection.get(include=["metadatas"])
+        counts: dict[str, int] = {}
+        for meta in result["metadatas"]:
+            counts[meta["document_id"]] = counts.get(meta["document_id"], 0) + 1
+        return counts
+
     def delete_document(self, document_id: str) -> None:
         """Remove every chunk that belongs to a document."""
         self._collection.delete(where={"document_id": document_id})

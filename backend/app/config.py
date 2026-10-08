@@ -57,5 +57,9 @@ class Settings(BaseSettings):
     # Largest PDF the upload endpoint accepts.
     max_upload_mb: int = 50
 
+    # At startup, delete leftovers of interrupted uploads (services/cleanup.py).
+    # Off by default: the owner turns it on after reviewing a report-only run.
+    startup_cleanup: bool = False
+
 # One shared instance that the rest of the app imports.
 settings = Settings()

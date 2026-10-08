@@ -7,13 +7,18 @@ from app.api.errors import register_error_handlers
 from app.api.upload_limit import reject_oversized_uploads
 from app.config import settings
 from app.db import models  # noqa: F401  (registers the tables on Base)
-from app.db.database import Base, engine
+from app.api.deps import get_upload_dir, get_vector_store
+from app.db.database import Base, SessionLocal, engine
+from app.services.cleanup import run_startup_cleanup
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     # Create any missing tables at startup (no migrations yet).
     Base.metadata.create_all(engine)
+    if settings.startup_cleanup:
+        with SessionLocal() as session:
+            run_startup_cleanup(session, get_upload_dir(), get_vector_store())
     yield
 
 
