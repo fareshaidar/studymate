@@ -50,6 +50,7 @@ class RankedChunk:
     page: PageRef
     score: float
     usable: bool  # passes the diagram filter (is_usable), like in the chat pipeline
+    chunk_index: int = 0  # identifies the chunk within its document (for drift checks)
 
 
 @dataclass
