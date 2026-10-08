@@ -97,6 +97,37 @@ describe("UploadDropzone", () => {
     await upload.resolve();
   });
 
+  it("says how many pages had text after an upload", async () => {
+    vi.mocked(uploadDocument).mockResolvedValue({ ...doc, page_count: 20, text_page_count: 20 });
+    render(<UploadDropzone onUploaded={vi.fn()} />);
+
+    await userEvent.upload(screen.getByLabelText("Choose a PDF file"), pdf);
+
+    expect(await screen.findByText("Indexed notes.pdf: text found on 20 of 20 pages.")).toBeInTheDocument();
+    expect(screen.queryByText(/scanned images/)).not.toBeInTheDocument();
+  });
+
+  it("explains pages without text", async () => {
+    vi.mocked(uploadDocument).mockResolvedValue({ ...doc, page_count: 20, text_page_count: 12 });
+    render(<UploadDropzone onUploaded={vi.fn()} />);
+
+    await userEvent.upload(screen.getByLabelText("Choose a PDF file"), pdf);
+
+    expect(await screen.findByText("Indexed notes.pdf: text found on 12 of 20 pages.")).toBeInTheDocument();
+    expect(
+      screen.getByText("The other pages may be scanned images; their text can't be searched."),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps it short when an older backend sends no page count", async () => {
+    vi.mocked(uploadDocument).mockResolvedValue(doc);
+    render(<UploadDropzone onUploaded={vi.fn()} />);
+
+    await userEvent.upload(screen.getByLabelText("Choose a PDF file"), pdf);
+
+    expect(await screen.findByText("Indexed notes.pdf.")).toBeInTheDocument();
+  });
+
   it("refuses a file over the backend's limit without uploading it", () => {
     render(<UploadDropzone onUploaded={vi.fn()} maxUploadMb={1} />);
     const big = new File([new Uint8Array(1024 * 1024 + 1)], "textbook.pdf", { type: "application/pdf" });

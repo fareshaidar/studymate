@@ -5,8 +5,9 @@ from sqlalchemy.orm import sessionmaker
 from app.db.database import Base, make_engine
 from app.db.models import Document
 from app.rag.vectorstore import VectorStore
+from app.services import ingest
 from app.services.ingest import IngestError, ingest_pdf
-from tests.helpers import make_pdf
+from tests.helpers import make_password_pdf, make_pdf
 
 GA_TEXT = "A genetic algorithm evolves a population of solutions using mutation."
 PIZZA_TEXT = "Pepperoni pizza is baked with mozzarella cheese and tomato sauce."
@@ -29,12 +30,14 @@ def test_ingest_records_document_and_indexes_chunks(tmp_path, session, store):
     pdf = tmp_path / "notes.pdf"
     make_pdf(pdf, [GA_TEXT, "", PIZZA_TEXT])
 
-    doc = ingest_pdf(pdf, "notes.pdf", session, store)
+    result = ingest_pdf(pdf, "notes.pdf", session, store)
+    doc = result.document
 
     saved = session.get(Document, doc.id)
     assert saved.filename == "notes.pdf"
     assert saved.page_count == 3  # the blank page still counts
     assert saved.chunk_count == 2
+    assert result.text_page_count == 2  # but has no text
 
     results = store.search("How do genetic algorithms work?", k=2)
     assert results[0].document_id == doc.id
@@ -48,8 +51,8 @@ def test_chunk_size_can_be_chosen(tmp_path, session, store):
     pdf = tmp_path / "notes.pdf"
     make_pdf(pdf, [page])
 
-    default = ingest_pdf(pdf, "default.pdf", session, store)
-    small = ingest_pdf(pdf, "small.pdf", session, store, max_chars=300, overlap_chars=50)
+    default = ingest_pdf(pdf, "default.pdf", session, store).document
+    small = ingest_pdf(pdf, "small.pdf", session, store, max_chars=300, overlap_chars=50).document
 
     assert small.chunk_count > default.chunk_count
     assert all(len(c.text) <= 300 for c in store.get_chunks(small.id))
@@ -69,8 +72,39 @@ def test_invalid_pdf_is_rejected(tmp_path, session, store):
     fake = tmp_path / "fake.pdf"
     fake.write_text("this is not a pdf")
 
-    with pytest.raises(IngestError):
+    with pytest.raises(IngestError, match="not a valid PDF"):
         ingest_pdf(fake, "fake.pdf", session, store)
+
+
+def test_empty_file_is_rejected(tmp_path, session, store):
+    empty = tmp_path / "empty.pdf"
+    empty.write_bytes(b"")
+
+    with pytest.raises(IngestError, match="The file is empty"):
+        ingest_pdf(empty, "empty.pdf", session, store)
+
+
+def test_password_protected_pdf_is_rejected_with_a_clear_reason(tmp_path, session, store):
+    locked = tmp_path / "locked.pdf"
+    make_password_pdf(locked)
+
+    with pytest.raises(IngestError, match="password-protected"):
+        ingest_pdf(locked, "locked.pdf", session, store)
+    assert session.scalar(select(func.count()).select_from(Document)) == 0
+
+
+def test_any_other_read_error_becomes_a_friendly_ingest_error(tmp_path, session, store, monkeypatch):
+    pdf = tmp_path / "notes.pdf"
+    make_pdf(pdf, [GA_TEXT])
+
+    def broken_extract(path):
+        raise RuntimeError("internal PyMuPDF detail")
+
+    monkeypatch.setattr(ingest, "extract_pages", broken_extract)
+
+    with pytest.raises(IngestError, match="could not be read") as info:
+        ingest_pdf(pdf, "notes.pdf", session, store)
+    assert "internal PyMuPDF detail" not in str(info.value)
 
 
 def test_failed_commit_removes_the_chunks(tmp_path, session, store, monkeypatch):

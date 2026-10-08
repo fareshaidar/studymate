@@ -1,6 +1,6 @@
 import { API_PREFIX } from "../proxy";
 import { buildApiError, OFFLINE_MESSAGE } from "./client";
-import { ApiError, type DocumentInfo } from "./types";
+import { ApiError, type UploadedDocument } from "./types";
 
 /** What the UI shows while an upload runs. */
 export type UploadProgress =
@@ -18,7 +18,7 @@ export type UploadProgress =
 export function uploadDocument(
   file: File,
   onProgress: (progress: UploadProgress) => void,
-): Promise<DocumentInfo> {
+): Promise<UploadedDocument> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${API_PREFIX}/documents`);
@@ -33,7 +33,7 @@ export function uploadDocument(
 
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        resolve(JSON.parse(xhr.responseText) as DocumentInfo);
+        resolve(JSON.parse(xhr.responseText) as UploadedDocument);
       } else {
         reject(buildApiError(xhr.status, xhr.responseText, xhr.getResponseHeader("Retry-After")));
       }

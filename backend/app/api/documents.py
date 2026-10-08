@@ -1,3 +1,4 @@
+import logging
 import shutil
 import uuid
 from datetime import datetime
@@ -17,6 +18,7 @@ from app.rag.vectorstore import VectorStore
 from app.services.ingest import IngestError, ingest_pdf
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+logger = logging.getLogger(__name__)
 
 _COPY_CHUNK = 1024 * 1024  # copy uploads 1 MB at a time
 
@@ -29,6 +31,16 @@ class DocumentOut(BaseModel):
     page_count: int
     chunk_count: int
     created_at: datetime
+
+
+class UploadedDocumentOut(DocumentOut):
+    """The upload response: a document plus how many of its pages had text.
+
+    An added field, so clients that only know DocumentOut are unaffected. Only the
+    upload returns it: the count isn't stored (there are no database migrations).
+    """
+
+    text_page_count: int
 
 
 def _save_upload(upload: UploadFile, dest: Path, max_bytes: int) -> None:
@@ -44,13 +56,22 @@ def _save_upload(upload: UploadFile, dest: Path, max_bytes: int) -> None:
             out.write(block)
 
 
-@router.post("", response_model=DocumentOut, status_code=status.HTTP_201_CREATED)
+def _remove_temporary(path: Path) -> None:
+    """Delete the temporary upload. A failure here (e.g. Windows still holding the file)
+    is logged, not raised: it must never turn a clear 422 or a success into a 500."""
+    try:
+        path.unlink(missing_ok=True)
+    except OSError as exc:
+        logger.warning("Could not delete temporary upload %s: %s", path.name, type(exc).__name__)
+
+
+@router.post("", response_model=UploadedDocumentOut, status_code=status.HTTP_201_CREATED)
 def upload_document(
     file: UploadFile,
     session: Session = Depends(get_db),
     store: VectorStore = Depends(get_vector_store),
     upload_dir: Path = Depends(get_upload_dir),
-) -> Document:
+) -> UploadedDocumentOut:
     """Upload a PDF and index it. Plain `def`: embedding is slow and blocking."""
     filename = Path(file.filename or "").name
     if not filename.lower().endswith(".pdf"):
@@ -60,13 +81,16 @@ def upload_document(
     try:
         _save_upload(file, tmp_path, settings.max_upload_mb * 1024 * 1024)
         try:
-            doc = ingest_pdf(tmp_path, filename, session, store)
+            result = ingest_pdf(tmp_path, filename, session, store)
         except IngestError as exc:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
-        shutil.move(tmp_path, upload_dir / f"{doc.id}.pdf")
+        shutil.move(tmp_path, upload_dir / f"{result.document.id}.pdf")
     finally:
-        tmp_path.unlink(missing_ok=True)
-    return doc
+        _remove_temporary(tmp_path)
+    return UploadedDocumentOut(
+        **DocumentOut.model_validate(result.document).model_dump(),
+        text_page_count=result.text_page_count,
+    )
 
 
 @router.get("", response_model=list[DocumentOut])

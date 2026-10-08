@@ -1,6 +1,7 @@
 import { useState, type ChangeEvent, type DragEvent } from "react";
 
 import { errorMessage } from "../../api/client";
+import type { UploadedDocument } from "../../api/types";
 import { uploadDocument, type UploadProgress } from "../../api/upload";
 
 interface UploadDropzoneProps {
@@ -8,6 +9,22 @@ interface UploadDropzoneProps {
   onUploaded: () => void | Promise<void>;
   /** Largest upload the backend accepts, in MB; null while unknown (then only the backend checks). */
   maxUploadMb?: number | null;
+}
+
+/**
+ * What an upload indexed, in one or two lines. A backend that doesn't report
+ * text_page_count (older version) gets just "Indexed <name>."
+ */
+export function describeUpload(doc: UploadedDocument): string[] {
+  if (doc.text_page_count === undefined) {
+    return [`Indexed ${doc.filename}.`];
+  }
+  const pages = `${doc.page_count} page${doc.page_count === 1 ? "" : "s"}`;
+  const lines = [`Indexed ${doc.filename}: text found on ${doc.text_page_count} of ${pages}.`];
+  if (doc.text_page_count < doc.page_count) {
+    lines.push("The other pages may be scanned images; their text can't be searched.");
+  }
+  return lines;
 }
 
 /**
@@ -20,10 +37,13 @@ export function UploadDropzone({ onUploaded, maxUploadMb = null }: UploadDropzon
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<UploadProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // What the last successful upload indexed; kept until the next upload starts.
+  const [indexed, setIndexed] = useState<string[] | null>(null);
   const [dragging, setDragging] = useState(false);
 
   async function startUpload(file: File): Promise<void> {
     setError(null);
+    setIndexed(null);
     // A dropped file skips the picker's accept filter, so check here too. The
     // backend still validates; this just gives a faster, friendlier message.
     if (!file.name.toLowerCase().endsWith(".pdf")) {
@@ -38,7 +58,8 @@ export function UploadDropzone({ onUploaded, maxUploadMb = null }: UploadDropzon
     }
     setBusy(true);
     try {
-      await uploadDocument(file, setProgress);
+      const uploaded = await uploadDocument(file, setProgress);
+      setIndexed(describeUpload(uploaded));
       await onUploaded();
     } catch (err) {
       setError(errorMessage(err));
@@ -114,6 +135,14 @@ export function UploadDropzone({ onUploaded, maxUploadMb = null }: UploadDropzon
         <p role="alert" className="mt-2 text-red-700">
           {error}
         </p>
+      )}
+      {indexed && (
+        // aria-live: screen readers announce the result when it appears.
+        <div aria-live="polite" className="mt-2 text-green-800">
+          {indexed.map((line) => (
+            <p key={line}>{line}</p>
+          ))}
+        </div>
       )}
     </div>
   );

@@ -38,8 +38,8 @@ only; never reword or use the held-out items for choosing settings.
 Phase 9 progress is recorded in docs/phase-notes/phase-9-hardening.md.
 Evaluation PDFs are git-ignored; never commit them or backend/evaluation/results/.
 Notes are in docs/phase-notes/.
-Current: Phase 9 (hardening), steps 1-4 done; next step 5 (corrupt, encrypted and
-empty PDFs; "indexed N of M pages").
+Current: Phase 9 (hardening), steps 1-5 done; next step 6 (error handling: catch-all
+handler, friendly unknown-document message, error code, UI refresh).
 
 ## Roadmap (one phase at a time, never start the next without my OK)
 5 Conversation, 6 Study tools, 7 Evaluation, 8 Frontend, 9 Hardening,

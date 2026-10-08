@@ -121,3 +121,23 @@ front-matter flag, so one search per question gives the numbers with the filter 
 - **Batched Chroma adds.** Chunks are embedded and added 500 at a time, below Chroma's maximum
   batch size, with fewer embeddings in memory at once. A failed batch is cleaned up by
   `ingest_pdf`, which deletes the document's chunks on any error.
+
+## Step 5: unreadable PDFs and "indexed N of M pages"
+
+- **Every unreadable file is a clear 422**, shown in the drop zone: an empty file ("The file is
+  empty."), a password-protected PDF ("…Remove the password and upload it again.", via
+  `needs_pass`; it used to be a 500), a damaged or non-PDF file ("The file is not a valid
+  PDF."), and any other PyMuPDF read error ("This PDF could not be read."; only the error type
+  is logged). The catch-all covers reading only, so a database or Chroma failure still
+  surfaces as a server error.
+- **A Windows bug found by the new tests:** when PyMuPDF fails while opening a damaged file
+  by name, it can keep the file open until garbage collection, and Windows can't delete an
+  open file. The upload's cleanup then raised, turning the 422 into a 500 and leaving the
+  temporary file behind. The parser now opens PDFs from their bytes, and a failed cleanup is
+  logged instead of raised. Live check: a damaged and an empty upload both return 422 and
+  leave no temporary file.
+- **"Indexed N of M pages."** `ingest_pdf` returns an `IngestResult` with the number of pages
+  that had text; `POST /documents` adds `text_page_count` to its response (an added field;
+  `GET /documents` is unchanged, since the count isn't stored: no migrations). The drop zone
+  shows "Indexed notes.pdf: text found on 12 of 20 pages." and, when pages are missing, "The
+  other pages may be scanned images; their text can't be searched."

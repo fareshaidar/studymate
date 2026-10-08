@@ -84,10 +84,10 @@ def build_index(
     app_ids = {}
     for doc in dataset.documents:
         path = document_path(doc, documents_dir)  # raises if missing or a different file
-        record = ingest_pdf(
+        result = ingest_pdf(
             path, doc.file, session, store, max_chars=max_chars, overlap_chars=overlap_chars
         )
-        app_ids[doc.id] = record.id
+        app_ids[doc.id] = result.document.id
     dataset_ids = {app_id: doc_id for doc_id, app_id in app_ids.items()}
     return EvalIndex(session=session, store=store, app_ids=app_ids, dataset_ids=dataset_ids)
 

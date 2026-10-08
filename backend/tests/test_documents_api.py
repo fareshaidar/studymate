@@ -8,7 +8,7 @@ from app.config import settings
 from app.db.database import Base, make_engine
 from app.main import app
 from app.rag.vectorstore import VectorStore
-from tests.helpers import make_pdf
+from tests.helpers import make_password_pdf, make_pdf
 
 GA_TEXT = "A genetic algorithm evolves a population of solutions using mutation."
 
@@ -54,11 +54,55 @@ def test_upload_indexes_pdf_and_lists_it(tmp_path, env):
     assert body["filename"] == "notes.pdf"
     assert body["page_count"] == 2
     assert body["chunk_count"] == 1
+    assert body["text_page_count"] == 1  # the second page is blank
     assert (upload_dir / f"{body['id']}.pdf").exists()
     assert store.search("genetic algorithm")[0].document_id == body["id"]
 
     listed = client.get("/documents").json()
     assert [d["id"] for d in listed] == [body["id"]]
+    # The list is unchanged: the count is only known right after the upload.
+    assert "text_page_count" not in listed[0]
+
+
+@pytest.mark.parametrize(
+    ("make", "message"),
+    [
+        (lambda p: p.write_bytes(b""), "The file is empty."),
+        (lambda p: make_password_pdf(p),
+         "This PDF is password-protected. Remove the password and upload it again."),
+        (lambda p: p.write_bytes(b"%PDF-1.7 broken beyond repair"), "The file is not a valid PDF."),
+    ],
+)
+def test_unreadable_pdfs_are_a_clear_422_not_a_500(tmp_path, env, make, message):
+    client, _, upload_dir = env
+    pdf = tmp_path / "bad.pdf"
+    make(pdf)
+
+    response = upload(client, pdf)
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == message
+    # The temporary file is cleaned up: PyMuPDF no longer holds a damaged file open.
+    assert list(upload_dir.iterdir()) == []
+
+
+def test_a_failed_cleanup_never_turns_the_answer_into_a_500(tmp_path, env, monkeypatch):
+    client, _, _ = env
+    real_unlink = documents_api.Path.unlink
+
+    def locked_unlink(self, missing_ok=False):
+        if self.name.startswith("upload-"):
+            raise PermissionError("[WinError 32] the file is in use")
+        return real_unlink(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(documents_api.Path, "unlink", locked_unlink)
+    bad = tmp_path / "bad.pdf"
+    bad.write_bytes(b"%PDF-1.7 broken beyond repair")
+
+    response = upload(client, bad)
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "The file is not a valid PDF."
 
 
 def test_non_pdf_is_rejected(tmp_path, env):

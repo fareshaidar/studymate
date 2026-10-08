@@ -17,6 +17,11 @@ export interface DocumentInfo {
   created_at: string; // ISO date-time string
 }
 
+/** The reply of POST /documents: the document, plus pages with text (newer backends only). */
+export interface UploadedDocument extends DocumentInfo {
+  text_page_count?: number;
+}
+
 /**
  * One passage shown to the model. `n` is the number used for [n] in the answer;
  * `page` starts at 1; `cited` says whether the answer actually cites it.
