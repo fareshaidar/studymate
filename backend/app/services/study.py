@@ -4,6 +4,7 @@ Nothing is stored: every request reads the chunks, calls the LLM and returns the
 """
 
 import logging
+import random
 from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
@@ -11,14 +12,19 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.llm.base import LLMClient
 from app.rag.prompts import PromptChunk
+from app.rag.structured import FlashcardsLLM, QuizLLM, generate_json
 from app.rag.study_prompts import (
+    FLASHCARDS_SYSTEM_PROMPT,
     NOTHING_USABLE_MESSAGE,
+    QUIZ_SYSTEM_PROMPT,
     SUMMARY_SYSTEM_PROMPT,
     build_combine_prompt,
+    build_flashcards_prompt,
+    build_quiz_prompt,
     build_summary_prompt,
 )
-from app.rag.vectorstore import StoredChunk, VectorStore
-from app.services.selection import evenly_spaced, resolve_documents, usable
+from app.rag.vectorstore import SearchResult, StoredChunk, VectorStore
+from app.services.selection import evenly_spaced, resolve_documents, select_passages, usable
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +46,45 @@ class SummaryResult:
     truncated: bool = False  # True if some of the material had to be left out (call cap)
     llm_calls: int = 0
     pages: list[DocumentPages] = field(default_factory=list)
+
+
+@dataclass
+class ItemSource:
+    """Where a quiz question or flashcard comes from: always one of the passages we sent."""
+
+    document_id: str
+    filename: str
+    page: int
+
+
+@dataclass
+class QuizQuestion:
+    question: str
+    options: list[str]
+    correct_index: int
+    explanation: str
+    source: ItemSource
+
+
+@dataclass
+class QuizResult:
+    found: bool
+    message: str | None = None
+    questions: list[QuizQuestion] = field(default_factory=list)
+
+
+@dataclass
+class Flashcard:
+    front: str
+    back: str
+    source: ItemSource
+
+
+@dataclass
+class FlashcardsResult:
+    found: bool
+    message: str | None = None
+    cards: list[Flashcard] = field(default_factory=list)
 
 
 def summarize(
@@ -140,7 +185,10 @@ def _batches(chunks: list[StoredChunk], max_chars: int) -> list[list[StoredChunk
     return batches
 
 
-def _numbered(chunks: list[StoredChunk], filenames: dict[str, str]) -> list[PromptChunk]:
+def _numbered(
+    chunks: list[StoredChunk] | list[StoredChunk | SearchResult], filenames: dict[str, str]
+) -> list[PromptChunk]:
+    """The chunks as passages numbered from 1, the numbers the model refers to."""
     return [
         PromptChunk(n=n, filename=filenames[c.document_id], page=c.page, text=c.text)
         for n, c in enumerate(chunks, start=1)
@@ -160,3 +208,110 @@ def _pages_covered(
         for doc_id, filename in filenames.items()
         if doc_id in pages
     ]
+
+
+def make_quiz(
+    document_ids: list[str] | None,
+    num_questions: int,
+    topic: str | None,
+    *,
+    session: Session,
+    store: VectorStore,
+    llm: LLMClient,
+    rng: random.Random | None = None,
+) -> QuizResult:
+    """Multiple-choice questions from the documents, each linked to the passage it came from.
+
+    The options are shuffled here, not trusted from the model: models tend to put
+    the correct answer first. `rng` lets tests make the shuffle repeatable.
+    """
+    filenames = resolve_documents(session, document_ids)  # raises UnknownDocumentError
+    passages = select_passages(list(filenames), topic, settings.study_max_passages, store)
+    if not passages:
+        logger.info("study kind=quiz passages=0 llm_calls=0")
+        return QuizResult(found=False, message=NOTHING_USABLE_MESSAGE)
+
+    chunks = _numbered(passages, filenames)
+    quiz = generate_json(
+        llm,
+        build_quiz_prompt(chunks, num_questions, topic),
+        system=QUIZ_SYSTEM_PROMPT,
+        schema=QuizLLM,
+        context={"n_passages": len(chunks)},
+    )
+    rng = rng or random.Random()
+    questions = []
+    # The model may write more items than asked for; extras are dropped.
+    for item in quiz.questions[:num_questions]:
+        options, correct_index = _shuffled(item.options, item.correct_index, rng)
+        questions.append(
+            QuizQuestion(
+                question=item.question,
+                options=options,
+                correct_index=correct_index,
+                explanation=item.explanation,
+                source=_source_of(item.passage, passages, filenames),
+            )
+        )
+    logger.info("study kind=quiz passages=%d items=%d", len(passages), len(questions))
+    return QuizResult(found=True, questions=questions)
+
+
+def make_flashcards(
+    document_ids: list[str] | None,
+    num_cards: int,
+    topic: str | None,
+    *,
+    session: Session,
+    store: VectorStore,
+    llm: LLMClient,
+) -> FlashcardsResult:
+    """Flashcards from the documents, each linked to the passage it came from."""
+    filenames = resolve_documents(session, document_ids)  # raises UnknownDocumentError
+    passages = select_passages(list(filenames), topic, settings.study_max_passages, store)
+    if not passages:
+        logger.info("study kind=flashcards passages=0 llm_calls=0")
+        return FlashcardsResult(found=False, message=NOTHING_USABLE_MESSAGE)
+
+    chunks = _numbered(passages, filenames)
+    result = generate_json(
+        llm,
+        build_flashcards_prompt(chunks, num_cards, topic),
+        system=FLASHCARDS_SYSTEM_PROMPT,
+        schema=FlashcardsLLM,
+        context={"n_passages": len(chunks)},
+    )
+    cards = [
+        Flashcard(
+            front=card.front,
+            back=card.back,
+            source=_source_of(card.passage, passages, filenames),
+        )
+        for card in result.cards[:num_cards]
+    ]
+    logger.info("study kind=flashcards passages=%d items=%d", len(passages), len(cards))
+    return FlashcardsResult(found=True, cards=cards)
+
+
+def _shuffled(options: list[str], correct_index: int, rng: random.Random) -> tuple[list[str], int]:
+    """The options in a random order, and the new position of the correct one."""
+    order = list(range(len(options)))
+    rng.shuffle(order)
+    # order[new_position] = old_position, so the correct answer moves to where its old index is.
+    return [options[i] for i in order], order.index(correct_index)
+
+
+def _source_of(
+    passage: int,
+    passages: list[StoredChunk | SearchResult],
+    filenames: dict[str, str],
+) -> ItemSource:
+    """Document and page of passage number `passage` (1-based), from what we sent.
+
+    The model only gives the passage number (already checked to be in range),
+    never a page, so a wrong page can't be invented.
+    """
+    chunk = passages[passage - 1]
+    return ItemSource(
+        document_id=chunk.document_id, filename=filenames[chunk.document_id], page=chunk.page
+    )

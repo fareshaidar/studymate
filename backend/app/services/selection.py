@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db.models import Document
 from app.rag.text_quality import alnum_ratio, strip_diagram_chars
+from app.rag.vectorstore import SearchResult, StoredChunk, VectorStore
 
 
 class UnknownDocumentError(LookupError):
@@ -70,3 +71,33 @@ def evenly_spaced(items: Sequence[T], n: int) -> list[T]:
         return []
     # Take the middle of each of n equal slices, e.g. 10 items, n=2 -> positions 2 and 7.
     return [items[int((i + 0.5) * len(items) / n)] for i in range(n)]
+
+
+def select_passages(
+    document_ids: list[str],
+    topic: str | None,
+    limit: int,
+    store: VectorStore,
+) -> list[StoredChunk | SearchResult]:
+    """Up to `limit` usable chunks to build a quiz or flashcards from.
+
+    With a topic: the chunks most similar to it (above `min_similarity`), best first.
+    Without one: each document gets an equal share, spread evenly through it, so
+    one long document can't crowd out a short one. A share a short document can't
+    fill is simply left unused (kept simple on purpose).
+    """
+    if not document_ids:
+        # Also needed for the search below: an empty list there would mean "all chunks",
+        # including orphan chunks of deleted documents.
+        return []
+    if topic:
+        results = store.search(topic, k=limit * 2, document_ids=document_ids)
+        relevant = [r for r in results if r.score >= settings.min_similarity]
+        return usable(relevant)[:limit]
+
+    passages: list[StoredChunk | SearchResult] = []
+    share, extra = divmod(limit, len(document_ids))
+    for i, doc_id in enumerate(document_ids):
+        n = share + (1 if i < extra else 0)
+        passages.extend(evenly_spaced(usable(store.get_chunks(doc_id)), n))
+    return passages
