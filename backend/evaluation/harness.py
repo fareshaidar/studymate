@@ -114,13 +114,43 @@ class BudgetExhausted(Exception):
     chat pipeline (which tolerates LLM errors in rewriting) can't swallow it."""
 
 
+@dataclass
+class RunState:
+    """What every LLM client of one run shares: the call budget, the time of the last
+    real call (for the pause) and the reply cache. The answerer and the judge may be
+    different models, but they spend the same quota and must not overwrite each
+    other's cache entries."""
+
+    max_calls: int
+    cache_path: Path | None = None
+    calls: int = 0
+    last_call_end: float | None = None
+    cache: dict[str, str] = field(default_factory=dict)
+
+    @classmethod
+    def load(cls, max_calls: int, cache_path: Path | None = None) -> "RunState":
+        state = cls(max_calls=max_calls, cache_path=cache_path)
+        if cache_path is not None and cache_path.exists():
+            state.cache = json.loads(cache_path.read_text(encoding="utf-8"))
+        return state
+
+    def save(self) -> None:
+        if self.cache_path is None:
+            return
+        self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+        # Write a temp file, then swap it in, so an interrupted run never leaves half a cache.
+        tmp = self.cache_path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(self.cache, ensure_ascii=False, indent=0), encoding="utf-8")
+        tmp.replace(self.cache_path)
+
+
 class CachedLLM(LLMClient):
     """Wraps an LLMClient for evaluation runs.
 
     - Replies are cached on disk by (model, system prompt, prompt), so a rerun, or a
       run that stopped halfway, only pays for prompts it hasn't seen.
-    - At most `max_calls` real calls (cache hits are free). Failed calls count too:
-      they still use quota.
+    - At most `state.max_calls` real calls per run (cache hits are free). Failed calls
+      count too: they still use quota.
     - At least `min_interval` seconds between the start of one real call and the end of
       the previous one, to stay friendly with free-tier rate limits.
     `sleep` and `clock` are injectable so tests don't wait.
@@ -131,25 +161,19 @@ class CachedLLM(LLMClient):
         inner: LLMClient,
         *,
         model: str,
-        cache_path: Path | None,
-        max_calls: int,
+        state: RunState,
         min_interval: float = 1.0,
         sleep: Callable[[float], None] = time.sleep,
         clock: Callable[[], float] = time.monotonic,
     ):
         self.inner = inner
         self.model = model
-        self.cache_path = cache_path
-        self.max_calls = max_calls
+        self.state = state
         self.min_interval = min_interval
         self._sleep = sleep
         self._clock = clock
-        self._last_call_end: float | None = None
-        self.real_calls = 0
+        self.real_calls = 0  # this client's own real calls (the budget counts all clients)
         self.cache_hits = 0
-        self._cache: dict[str, str] = {}
-        if cache_path is not None and cache_path.exists():
-            self._cache = json.loads(cache_path.read_text(encoding="utf-8"))
 
     def _key(self, prompt: str, system: str | None) -> str:
         raw = json.dumps([self.model, system, prompt], ensure_ascii=False)
@@ -157,19 +181,20 @@ class CachedLLM(LLMClient):
 
     def generate(self, prompt: str, system: str | None = None) -> str:
         key = self._key(prompt, system)
-        if key in self._cache:
+        if key in self.state.cache:
             self.cache_hits += 1
-            return self._cache[key]
-        if self.real_calls >= self.max_calls:
-            raise BudgetExhausted(f"--max-calls {self.max_calls} reached")
+            return self.state.cache[key]
+        if self.state.calls >= self.state.max_calls:
+            raise BudgetExhausted(f"--max-calls {self.state.max_calls} reached")
         self._pause()
+        self.state.calls += 1
         self.real_calls += 1
         try:
             reply = self.inner.generate(prompt, system=system)
         finally:
-            self._last_call_end = self._clock()
-        self._cache[key] = reply
-        self._save()
+            self.state.last_call_end = self._clock()
+        self.state.cache[key] = reply
+        self.state.save()
         return reply
 
     def stream(self, prompt: str, system: str | None = None) -> Iterator[str]:
@@ -177,20 +202,11 @@ class CachedLLM(LLMClient):
         yield self.generate(prompt, system=system)
 
     def _pause(self) -> None:
-        if self._last_call_end is None:
+        if self.state.last_call_end is None:
             return
-        wait = self.min_interval - (self._clock() - self._last_call_end)
+        wait = self.min_interval - (self._clock() - self.state.last_call_end)
         if wait > 0:
             self._sleep(wait)
-
-    def _save(self) -> None:
-        if self.cache_path is None:
-            return
-        self.cache_path.parent.mkdir(parents=True, exist_ok=True)
-        # Write a temp file, then swap it in, so an interrupted run never leaves half a cache.
-        tmp = self.cache_path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self._cache, ensure_ascii=False, indent=0), encoding="utf-8")
-        tmp.replace(self.cache_path)
 
 
 # --- Running one item ---
@@ -247,36 +263,39 @@ def run_case(
 LLM_MODES = ("real", "fake", "none")
 
 
-def make_llm(
+def make_llms(
     mode: str,
     *,
-    model: str | None = None,
+    judge_model: str | None = None,
     cache_path: Path | None = DEFAULT_CACHE,
     max_calls: int = 100,
     min_interval: float = 1.0,
-) -> CachedLLM | None:
-    """The LLM for a run: None for --no-llm, the scripted fake, or Gemini behind the cache.
+) -> tuple[CachedLLM | None, CachedLLM | None]:
+    """The (answerer, judge) of a run: (None, None) for --no-llm, the scripted fake,
+    or Gemini behind the cache. Both share one RunState (budget, pause, cache).
 
     Only "real" creates a GeminiClient (which needs the API key from the settings);
-    the fake never caches, so fake replies can't end up in the real cache.
+    the judge is the answering model unless `judge_model` names another one. The fake
+    never caches, so fake replies can't end up in the real cache.
     """
     if mode == "none":
-        return None
+        return None, None
     if mode == "fake":
         from evaluation.fake_llm import ScriptedEvalLLM
 
-        return CachedLLM(
-            ScriptedEvalLLM(), model="fake", cache_path=None, max_calls=max_calls, min_interval=0
+        fake = CachedLLM(
+            ScriptedEvalLLM(), model="fake", state=RunState.load(max_calls), min_interval=0
         )
+        return fake, fake
     if mode == "real":
         from app.llm.gemini import GeminiClient
 
-        client = GeminiClient(model=model)
-        return CachedLLM(
-            client,
-            model=client.model,
-            cache_path=cache_path,
-            max_calls=max_calls,
-            min_interval=min_interval,
-        )
+        state = RunState.load(max_calls, cache_path)
+        client = GeminiClient()
+        answerer = CachedLLM(client, model=client.model, state=state, min_interval=min_interval)
+        if not judge_model or judge_model == client.model:
+            return answerer, answerer
+        judge_client = GeminiClient(model=judge_model)
+        judge = CachedLLM(judge_client, model=judge_model, state=state, min_interval=min_interval)
+        return answerer, judge
     raise ValueError(f"unknown LLM mode {mode!r}; expected one of {LLM_MODES}")

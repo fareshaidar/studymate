@@ -21,11 +21,12 @@ from evaluation.harness import (
     BACKEND_DATA_DIR,
     BudgetExhausted,
     CachedLLM,
+    RunState,
     StopRun,
     UnsafePathError,
     build_index,
     ensure_outside_data,
-    make_llm,
+    make_llms,
     run_case,
     temporary_index,
 )
@@ -51,10 +52,11 @@ class FakeClock:
         self.now += seconds
 
 
-def cached(inner, tmp_path=None, clock=None, **kwargs):
+def cached(inner, tmp_path=None, clock=None, max_calls=100, model="m", state=None, **kwargs):
+    """A CachedLLM with a fake clock; with `tmp_path`, its cache lives in a file there."""
     clock = clock or FakeClock()
-    options = {"model": "m", "cache_path": tmp_path and tmp_path / "cache.json", "max_calls": 100}
-    return CachedLLM(inner, **{**options, **kwargs}, sleep=clock.sleep, clock=clock)
+    state = state or RunState.load(max_calls, tmp_path and tmp_path / "cache.json")
+    return CachedLLM(inner, model=model, state=state, sleep=clock.sleep, clock=clock, **kwargs)
 
 
 # --- ~1 second pause between real calls ---
@@ -132,6 +134,23 @@ def test_second_run_with_the_same_cache_makes_no_real_calls(tmp_path):
     assert second.generate("p1", system="s") == "A"
     assert inner.calls == [] and second.real_calls == 0
     assert cached(inner, tmp_path, model="other").generate("p1", system="s") == "B"
+
+
+def test_answerer_and_judge_share_one_budget_pause_and_cache(tmp_path):
+    clock = FakeClock()
+    state = RunState.load(max_calls=2, cache_path=tmp_path / "cache.json")
+    answerer = cached(FakeLLMClient(reply="answer"), clock=clock, state=state, model="m1")
+    judge = cached(FakeLLMClient(reply="verdict"), clock=clock, state=state, model="m2")
+
+    answerer.generate("p1")
+    judge.generate("p2")  # the judge waits after the answerer's call too
+
+    assert clock.sleeps == [1.0]
+    with pytest.raises(BudgetExhausted):
+        answerer.generate("p3")  # 2 calls in total: the budget is used up
+    # Both replies survived in the one cache file (neither client overwrote the other).
+    reloaded = RunState.load(max_calls=0, cache_path=tmp_path / "cache.json")
+    assert sorted(reloaded.cache.values()) == ["answer", "verdict"]
 
 
 # --- 429 then success, 503 that never recovers ---
@@ -266,10 +285,10 @@ def test_no_llm_and_fake_modes_never_create_a_gemini_client(monkeypatch):
 
     monkeypatch.setattr(app.llm.gemini, "GeminiClient", refuse)
 
-    assert make_llm("none") is None
-    fake = make_llm("fake")
-    assert isinstance(fake.inner, ScriptedEvalLLM)
-    assert fake.cache_path is None  # fake replies never reach the real cache
+    assert make_llms("none") == (None, None)
+    answerer, judge = make_llms("fake")
+    assert isinstance(answerer.inner, ScriptedEvalLLM) and judge is answerer
+    assert answerer.state.cache_path is None  # fake replies never reach the real cache
 
 
 def test_real_mode_gets_the_key_only_from_settings(monkeypatch):
@@ -277,7 +296,7 @@ def test_real_mode_gets_the_key_only_from_settings(monkeypatch):
     monkeypatch.setattr(settings, "gemini_api_key", "")
 
     with pytest.raises(MissingAPIKeyError):
-        make_llm("real")
+        make_llms("real")
 
 
 def test_evaluation_code_never_reads_env_files():
@@ -289,7 +308,7 @@ def test_evaluation_code_never_reads_env_files():
 
 def test_unknown_mode_is_rejected():
     with pytest.raises(ValueError):
-        make_llm("gpt")
+        make_llms("gpt")
 
 
 # --- the scripted fake ---

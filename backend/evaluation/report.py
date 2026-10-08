@@ -41,14 +41,17 @@ def git_commit() -> str:
 
 
 def settings_snapshot() -> dict[str, object]:
-    """The settings that affect retrieval and answers (never the API key)."""
+    """The settings that affect retrieval and answers.
+
+    The Gemini model name is left out on purpose: it may come from the owner's local
+    configuration, which reports don't print.
+    """
     return {
         "embedding_model": settings.embedding_model,
         "min_similarity": settings.min_similarity,
         "retrieval_top_k": settings.retrieval_top_k,
         "min_alnum_ratio": settings.min_alnum_ratio,
         "history_window": settings.history_window,
-        "gemini_model": settings.gemini_model,
     }
 
 
