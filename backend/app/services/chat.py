@@ -3,11 +3,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.db.models import Document
 from app.llm.base import LLMClient
 from app.llm.errors import LLMError
 from app.rag.citations import check_citations
@@ -21,8 +19,13 @@ from app.rag.prompts import (
     build_rewrite_prompt,
     is_not_found_answer,
 )
-from app.rag.text_quality import alnum_ratio, shorten, strip_diagram_chars
+from app.rag.text_quality import shorten, strip_diagram_chars
 from app.rag.vectorstore import SearchResult, VectorStore
+from app.services.selection import (  # noqa: F401  (UnknownDocumentError is re-exported for callers)
+    UnknownDocumentError,
+    is_usable,
+    resolve_documents,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +33,6 @@ SNIPPET_CHARS = 200
 # A standalone question longer than this is more likely an answer or an essay
 # than a question, so it isn't trusted for retrieval.
 MAX_REWRITE_CHARS = 500
-
-
-class UnknownDocumentError(LookupError):
-    """The question was limited to document ids that don't exist."""
-
-    def __init__(self, missing: list[str]):
-        super().__init__(f"Document not found: {', '.join(missing)}")
-        self.missing = missing
 
 
 @dataclass
@@ -120,12 +115,7 @@ def answer_question(
     the answer prompt. The answer LLM call is only made when retrieval finds passages
     that are similar enough; otherwise the fixed "not found" answer is returned.
     """
-    document_ids = document_ids or None  # an empty list means "all documents"
-    filenames = _filenames(session, document_ids)
-    if document_ids:
-        missing = [d for d in document_ids if d not in filenames]
-        if missing:
-            raise UnknownDocumentError(missing)
+    filenames = resolve_documents(session, document_ids)  # raises UnknownDocumentError
     if not filenames:
         # Nothing to search, so don't spend an LLM call on rewriting either.
         return _finish("no_relevant_chunks", results=[], kept=[], history=history)
@@ -142,7 +132,7 @@ def answer_question(
     relevant = [
         r
         for r in results
-        if r.score >= settings.min_similarity and alnum_ratio(r.text) >= settings.min_alnum_ratio
+        if r.score >= settings.min_similarity and is_usable(r.text)
     ][: settings.retrieval_top_k]
     if not relevant:
         return _finish(
@@ -206,14 +196,6 @@ def _finish(
         sources=sources or [],
         rewritten_question=rewritten,
     )
-
-
-def _filenames(session: Session, document_ids: list[str] | None) -> dict[str, str]:
-    """document_id -> filename for the given documents (or all of them), in one query."""
-    query = select(Document.id, Document.filename)
-    if document_ids is not None:
-        query = query.where(Document.id.in_(document_ids))
-    return {doc_id: filename for doc_id, filename in session.execute(query)}
 
 
 def _source(chunk: PromptChunk, result: SearchResult, cited: bool) -> Source:

@@ -55,3 +55,26 @@ def test_adding_the_same_document_twice_does_not_duplicate(tmp_path):
     store.add_chunks("doc1", sample_chunks())
 
     assert len(store.search("genetic algorithm", k=10)) == 2
+
+def test_get_chunks_returns_one_document_in_reading_order(tmp_path):
+    store = make_store(tmp_path)
+    # Added out of order on purpose: the result must still be sorted by chunk index.
+    store.add_chunks(
+        "doc1",
+        [
+            Chunk(text="Third chunk text.", page=5, index=2),
+            Chunk(text="First chunk text.", page=1, index=0),
+            Chunk(text="Second chunk text.", page=2, index=1),
+        ],
+    )
+    store.add_chunks("doc2", [Chunk(text="Other document.", page=1, index=0)])
+
+    chunks = store.get_chunks("doc1")
+
+    assert [c.text for c in chunks] == ["First chunk text.", "Second chunk text.", "Third chunk text."]
+    assert [c.page for c in chunks] == [1, 2, 5]
+    assert {c.document_id for c in chunks} == {"doc1"}
+
+
+def test_get_chunks_of_unknown_document_is_empty(tmp_path):
+    assert make_store(tmp_path).get_chunks("nope") == []

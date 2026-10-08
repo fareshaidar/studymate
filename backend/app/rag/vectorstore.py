@@ -21,6 +21,16 @@ class SearchResult:
     score: float  # cosine similarity: higher = closer in meaning
 
 
+@dataclass
+class StoredChunk:
+    """One chunk as stored, without a score (it wasn't found by a search)."""
+
+    text: str
+    page: int
+    document_id: str
+    chunk_index: int
+
+
 class VectorStore:
     """Thin wrapper around ChromaDB so the rest of the app never touches it."""
 
@@ -73,6 +83,23 @@ class VectorStore:
                 result["documents"][0], result["metadatas"][0], result["distances"][0]
             )
         ]
+
+    def get_chunks(self, document_id: str) -> list[StoredChunk]:
+        """Every chunk of one document, in reading order (by chunk index, so by page)."""
+        result = self._collection.get(
+            where={"document_id": document_id}, include=["documents", "metadatas"]
+        )
+        chunks = [
+            StoredChunk(
+                text=text,
+                page=meta["page"],
+                document_id=meta["document_id"],
+                chunk_index=meta["chunk_index"],
+            )
+            for text, meta in zip(result["documents"], result["metadatas"])
+        ]
+        # Chroma doesn't promise any order for `get`, so sort explicitly.
+        return sorted(chunks, key=lambda c: c.chunk_index)
 
     def delete_document(self, document_id: str) -> None:
         """Remove every chunk that belongs to a document."""

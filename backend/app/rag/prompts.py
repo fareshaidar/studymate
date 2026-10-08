@@ -58,6 +58,13 @@ class HistoryMessage:
     content: str
 
 
+def format_passages(chunks: Sequence[PromptChunk]) -> str:
+    """Numbered passages, each with its file and page, the text between <<< >>> delimiters."""
+    return "\n\n".join(
+        f"[{c.n}] ({c.filename}, page {c.page})\n<<<\n{c.text}\n>>>" for c in chunks
+    )
+
+
 def format_history(history: Sequence[HistoryMessage]) -> str:
     """The conversation as "Student: ..." / "StudyMate: ..." lines.
 
@@ -85,10 +92,7 @@ def build_prompt(
     question: str, chunks: list[PromptChunk], history: Sequence[HistoryMessage] = ()
 ) -> str:
     """The user message: the conversation (if any), the numbered passages, then the question."""
-    passages = "\n\n".join(
-        f"[{c.n}] ({c.filename}, page {c.page})\n<<<\n{c.text}\n>>>" for c in chunks
-    )
-    prompt = f"Context passages:\n\n{passages}\n\nQuestion: {question}"
+    prompt = f"Context passages:\n\n{format_passages(chunks)}\n\nQuestion: {question}"
     if history:
         prompt = f"{_history_block(history)}\n\n{prompt}"
     return prompt
