@@ -39,9 +39,21 @@ function json(body: unknown, status = 200): Response {
 function fakeBackend(initialDocs: DocumentInfo[], initialConversations: ConversationDetail[] = []) {
   let docs = [...initialDocs];
   let conversations = [...initialConversations];
+  const summaryBodies: unknown[] = [];
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
     if (url === "/api/health") return json({ status: "ok" });
+    if (url === "/api/study/summary" && method === "POST") {
+      summaryBodies.push(JSON.parse(init?.body as string));
+      return json({
+        found: true,
+        message: null,
+        summary: "A short summary.",
+        truncated: false,
+        llm_calls: 1,
+        pages: [],
+      });
+    }
     if (url === "/api/documents" && method === "GET") return json(docs);
     if (url === "/api/conversations" && method === "GET") {
       return json(conversations.map(({ id, title, created_at }) => ({ id, title, created_at })));
@@ -82,6 +94,8 @@ function fakeBackend(initialDocs: DocumentInfo[], initialConversations: Conversa
   });
   vi.stubGlobal("fetch", fetchMock);
   return {
+    /** The JSON bodies the app sent to /study/summary, in order. */
+    summaryBodies,
     /** Delete a conversation behind the app's back, like another browser tab would. */
     deleteElsewhere: (id: string) => {
       conversations = conversations.filter((c) => c.id !== id);
@@ -191,6 +205,34 @@ describe("App", () => {
     expect(alert).toHaveTextContent("Conversation not found.");
     expect(within(alert).getByRole("button", { name: "Start a new chat" })).toBeInTheDocument();
     expect(await screen.findByText(/No conversations yet/)).toBeInTheDocument();
+  });
+
+  it("keeps the chat when switching to Study and back", async () => {
+    fakeBackend([biology]);
+    render(<App />);
+    await screen.findByText("biology.pdf");
+    await ask("What is mitosis?");
+    expect(await screen.findByText("Mitosis.")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("tab", { name: "Study" }));
+    expect(screen.getByRole("tab", { name: "Study" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByText("Mitosis.")).not.toBeVisible();
+
+    await userEvent.click(screen.getByRole("tab", { name: "Chat" }));
+    expect(screen.getByText("Mitosis.")).toBeVisible();
+  });
+
+  it("uses the current chat's ticked documents in Study", async () => {
+    const backend = fakeBackend([biology, history]);
+    render(<App />);
+    await userEvent.click(await screen.findByRole("checkbox", { name: /history\.pdf/ }));
+
+    await userEvent.click(screen.getByRole("tab", { name: "Study" }));
+    expect(screen.getByText(/Using 1 of 2 documents/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Summarise" }));
+
+    expect(await screen.findByText("A short summary.")).toBeInTheDocument();
+    expect(backend.summaryBodies).toEqual([{ document_ids: ["d2"] }]);
   });
 
   it("shows the offline banner and list errors when the backend is down", async () => {

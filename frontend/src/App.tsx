@@ -10,6 +10,7 @@ import { BackendStatus } from "./components/common/BackendStatus";
 import { ErrorNotice } from "./components/common/ErrorNotice";
 import { ConversationList } from "./components/conversations/ConversationList";
 import { DocumentPanel } from "./components/documents/DocumentPanel";
+import { StudyView } from "./components/study/StudyView";
 import { fromStoredMessages } from "./lib/messages";
 import {
   forgetSelection,
@@ -17,6 +18,13 @@ import {
   NEW_CONVERSATION_KEY,
   useSelection,
 } from "./lib/selection";
+
+type Tab = "chat" | "study";
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: "chat", label: "Chat" },
+  { id: "study", label: "Study" },
+];
 
 /** A conversation that failed to open, kept so Retry knows which one. */
 interface FailedOpen {
@@ -32,6 +40,7 @@ interface FailedOpen {
  * step) need them.
  */
 export default function App() {
+  const [tab, setTab] = useState<Tab>("chat");
   const [documents, setDocuments] = useState<DocumentInfo[] | null>(null);
   const [documentsError, setDocumentsError] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[] | null>(null);
@@ -158,28 +167,66 @@ export default function App() {
       </aside>
       <main className="flex min-w-0 flex-1 flex-col gap-4 p-6">
         <BackendStatus />
-        {failedOpen && (
-          <ErrorNotice
-            error={failedOpen.error}
-            onRetry={() => void handleOpen(failedOpen.id)}
+        <div role="tablist" aria-label="Main view" className="flex gap-1 border-b border-gray-200">
+          {TABS.map(({ id, label }) => (
+            <button
+              key={id}
+              id={`tab-${id}`}
+              type="button"
+              role="tab"
+              aria-selected={tab === id}
+              aria-controls={`panel-${id}`}
+              onClick={() => setTab(id)}
+              className={`-mb-px border-b-2 px-4 py-2 ${
+                tab === id ? "border-blue-700 font-semibold text-blue-700" : "border-transparent text-gray-600"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Both panels stay mounted and the inactive one is hidden: unmounting would
+            drop an answer still loading in the chat, or a quiz in progress. */}
+        <section
+          id="panel-chat"
+          role="tabpanel"
+          aria-labelledby="tab-chat"
+          hidden={tab !== "chat"}
+          className="flex min-h-0 flex-1 flex-col gap-4"
+        >
+          {failedOpen && (
+            <ErrorNotice
+              error={failedOpen.error}
+              onRetry={() => void handleOpen(failedOpen.id)}
+              onNewChat={handleNewChat}
+            />
+          )}
+          {/* The current chat stays mounted while another loads, so a failed open loses nothing. */}
+          {opening && (
+            <p role="status" className="text-gray-600">
+              Loading conversation…
+            </p>
+          )}
+          <ChatView
+            key={chatSession}
+            documentIds={selectedIds}
+            conversationId={conversationId}
+            initialMessages={initialMessages}
+            existingDocumentIds={existingDocumentIds}
+            onConversationStarted={handleConversationStarted}
             onNewChat={handleNewChat}
           />
-        )}
-        {/* The current chat stays mounted while another loads, so a failed open loses nothing. */}
-        {opening && (
-          <p role="status" className="text-gray-600">
-            Loading conversation…
-          </p>
-        )}
-        <ChatView
-          key={chatSession}
-          documentIds={selectedIds}
-          conversationId={conversationId}
-          initialMessages={initialMessages}
-          existingDocumentIds={existingDocumentIds}
-          onConversationStarted={handleConversationStarted}
-          onNewChat={handleNewChat}
-        />
+        </section>
+        <section
+          id="panel-study"
+          role="tabpanel"
+          aria-labelledby="tab-study"
+          hidden={tab !== "study"}
+          className="min-h-0 flex-1 overflow-y-auto"
+        >
+          <StudyView documentIds={selectedIds} documentCount={documents?.length ?? 0} />
+        </section>
       </main>
     </div>
   );

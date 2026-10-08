@@ -66,6 +66,60 @@ export interface ConversationDetail extends ConversationSummary {
   messages: StoredMessage[];
 }
 
+/** Where a quiz question or flashcard comes from. */
+export interface ItemSource {
+  document_id: string;
+  filename: string;
+  page: number;
+}
+
+/** The pages of one document that a summary was built from. */
+export interface DocumentPages {
+  document_id: string;
+  filename: string;
+  pages: number[];
+}
+
+/** POST /study/summary. `message` says why there is no summary when found is false. */
+export interface SummaryResponse {
+  found: boolean;
+  message: string | null;
+  summary: string;
+  /** True if part of the material was skipped to stay within the LLM call cap. */
+  truncated: boolean;
+  llm_calls: number;
+  pages: DocumentPages[];
+}
+
+/** One multiple-choice question; the server has already shuffled the options. */
+export interface QuizQuestion {
+  question: string;
+  options: string[];
+  correct_index: number;
+  explanation: string;
+  source: ItemSource;
+}
+
+/** POST /study/quiz. */
+export interface QuizResponse {
+  found: boolean;
+  message: string | null;
+  questions: QuizQuestion[];
+}
+
+export interface Flashcard {
+  front: string;
+  back: string;
+  source: ItemSource;
+}
+
+/** POST /study/flashcards. */
+export interface FlashcardsResponse {
+  found: boolean;
+  message: string | null;
+  cards: Flashcard[];
+}
+
 /**
  * The one error type every API function throws.
  *
