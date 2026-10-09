@@ -247,6 +247,8 @@ backend:
 
 ## Sample documents and licences
 
+StudyMate's own code is released under the MIT licence (see LICENSE); the sample documents keep their own licences, listed below.
+
 The PDFs used for the evaluation and the manual checks are **not in this repository** (they
 are git-ignored). StudyMate works with any PDFs you upload yourself.
 
