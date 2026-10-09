@@ -9,7 +9,7 @@ generates summaries, quizzes, and flashcards from your material.
 > packaging (see [Quick start (Windows)](#quick-start-windows) and
 > [the Phase 10 notes](docs/phase-notes/phase-10-packaging.md)).
 
-Built with Claude Code as an AI pair programmer: I set the requirements, reviewed each step and made the design decisions, and the tests and evaluation were run and checked at every phase.
+Built with Claude Code as an AI pair programmer: I set the requirements, reviewed each step and made the design decisions, the tests were run at every phase, and the evaluation was built in Phase 7 and re-run in Phase 9.
 
 ## Quick start (Windows)
 
