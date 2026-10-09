@@ -8,6 +8,53 @@ generates summaries, quizzes, and flashcards from your material.
 > evaluation), the React frontend, and hardening (see [Hardening](#hardening-phase-9)).
 > Next: Phase 10, packaging.
 
+## Quick start (Windows)
+
+**You need:**
+- **Python 3.11** from [python.org](https://www.python.org/downloads/), with the `py` launcher
+  (ticked by default in the installer);
+- **Node.js 22.12 or newer**, the LTS version (22 or 24), from [nodejs.org](https://nodejs.org/);
+- **a Gemini API key** from Google AI Studio.
+
+**Then, in PowerShell, in the project folder:**
+
+1. Set up (once; safe to run again):
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
+   ```
+2. Open `backend\.env` (setup creates it the first time) and put your key after the equals
+   sign: `GEMINI_API_KEY=<your key>`. Setup never overwrites this file once it exists.
+3. Start StudyMate (each time):
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts\start.ps1
+   ```
+   Your browser opens at http://127.0.0.1:8000. Press Ctrl+C in that window to stop it.
+
+Notes:
+- `-ExecutionPolicy Bypass` applies to that one command only; it changes no system setting.
+- The first start downloads the embedding model (about 130 MB) once, so it takes longer.
+- `start.ps1` options: `-Port 8001` to use another port, `-NoBrowser` to not open the browser.
+- Your documents, conversations and search index stay on your computer, in `backend\data`.
+- Optional settings are listed, commented out at their defaults, in `backend\.env.example`.
+
+## Troubleshooting
+
+- **"running scripts is disabled on this system":** type the whole command shown above,
+  including `powershell -ExecutionPolicy Bypass -File`, rather than just `scripts\setup.ps1`.
+- **"Python 3.11 is not installed" or "the Python launcher 'py' was not found":** install
+  Python 3.11 from python.org, then open a new PowerShell window and run setup again.
+- **"Node.js was not found" or "Node.js … is too old":** install the Node.js LTS version (22 or
+  24), then open a new PowerShell window and run setup again.
+- **Setup fails with an EPERM error:** close npm run dev and any editor terminals in the
+  frontend folder, then run setup again.
+- **"port 8000 is already in use":** StudyMate (or another program) is already running there.
+  Close it, or start on another port:
+  `powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -Port 8001`.
+- **An amber banner "The AI isn't set up yet":** put your key in `backend\.env`
+  (`GEMINI_API_KEY=<your key>`), then stop StudyMate with Ctrl+C and start it again.
+- **The first start is slow:** the one-time embedding model download (about 130 MB).
+- **"Not started: … Run setup first":** run `scripts\setup.ps1` as in step 1 above.
+
 ## Features
 
 - PDF upload and indexing, with answers citing the exact document and page
@@ -193,6 +240,18 @@ backend:
 | `EXCLUDE_FRONT_MATTER=true` | off | Leave tables of contents and lists of figures out of answers and study tools. Measured: no gain in finding the right page, so off. |
 | `STARTUP_CLEANUP=true` | off | At startup, delete leftovers of interrupted uploads (old temporary files, PDFs and chunks with no document). A report-only run on real data found nothing to delete. |
 
+## Sample documents and licences
+
+The PDFs used for the evaluation and the manual checks are **not in this repository** (they
+are git-ignored). StudyMate works with any PDFs you upload yourself.
+
+| Document | Used for | Source | Licence |
+|---|---|---|---|
+| MSFC Skylab Crew Systems Mission Evaluation (NASA TM X-64825), `19740024203.pdf` | Evaluation | `<TO FILL IN>` | `<TO FILL IN>` |
+| Space Telescope Focal Plane Camera Final Report (NASA-CR-150117), `19770007900.pdf` | Evaluation | `<TO FILL IN>` | `<TO FILL IN>` |
+| IPCC AR6 Synthesis Report, Summary for Policymakers, `IPCC_AR6_SYR_SPM.pdf` | Evaluation | `<TO FILL IN>` | `<TO FILL IN>` |
+| `sample1.pdf` | Manual checks | `<TO FILL IN>` | `<TO FILL IN>` |
+
 ## Tech stack
 
 - **Backend:** Python, FastAPI, SQLite, ChromaDB, sentence-transformers, the Gemini API.
@@ -201,12 +260,15 @@ backend:
 
 ## Run the backend
 
+For development: the backend and the frontend run separately, in two PowerShell windows, with
+automatic reload. To just use the app, see [Quick start (Windows)](#quick-start-windows).
+
 ```powershell
 cd backend
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-Copy-Item .env.example .env
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }   # never overwrites an existing .env
 uvicorn app.main:app --reload
 ```
 
@@ -214,8 +276,8 @@ Then open http://127.0.0.1:8000/docs
 
 ## Run the frontend
 
-Needs Node.js (developed with Node 24). Keep the backend running in one PowerShell window, then in
-a second one:
+Needs Node.js 22.12 or newer (developed with Node 24). Keep the backend running in one
+PowerShell window, then in a second one:
 
 ```powershell
 cd frontend
