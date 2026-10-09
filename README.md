@@ -85,7 +85,7 @@ details. Full baseline reports: [retrieval](docs/evaluation/retrieval-baseline.m
 [answers](docs/evaluation/answer-baseline.md).
 
 - **Tuning set:** 55 questions, used to choose settings.
-- **Held-out set:** 10 questions by the project owner, never used to choose settings.
+- **Held-out set:** 10 questions, drafted with AI help and reviewed by the project owner, never used to choose settings.
 
 Measured with similarity threshold 0.55 and 1800-character chunks, at top_k 5 (the default
 until Phase 9) and top_k 8 (the default since Phase 9; see the [top_k 8
@@ -253,7 +253,7 @@ are git-ignored). StudyMate works with any PDFs you upload yourself.
 | MSFC Skylab Crew Systems Mission Evaluation (NASA TM X-64825), `19740024203.pdf` | Evaluation | NASA technical report | NASA in-house report; I am not redistributing the PDF |
 | Space Telescope Focal Plane Camera Final Report (NASA-CR-150117), `19770007900.pdf` | Evaluation | NASA Technical Reports Server (ntrs.nasa.gov), document 19770007900, NASA-CR-150117, contractor report, April 1976 | Public Use Permitted (as stated on the NTRS record); I am not redistributing the PDF |
 | IPCC AR6 Synthesis Report, Summary for Policymakers, `IPCC_AR6_SYR_SPM.pdf` | Evaluation | ipcc.ch | IPCC permits short attributed extracts; the PDF is not in this repository |
-| `sample1.pdf` | Manual checks | `<TO FILL IN>` | `<TO FILL IN>` |
+| `sample1.pdf` | Manual checks | Not recorded (a small test PDF used for manual checks) | Not redistributed; not in this repository |
 
 ## Tech stack
 
