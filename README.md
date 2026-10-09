@@ -4,9 +4,10 @@ A RAG-based study assistant. Upload your lecture notes and PDFs, ask questions,
 and get answers with citations to the exact document and page. It also
 generates summaries, quizzes, and flashcards from your material.
 
-> Status: Phases 0–9 are done: the backend (ingestion, cited chat, conversations, study tools,
-> evaluation), the React frontend, and hardening (see [Hardening](#hardening-phase-9)).
-> Next: Phase 10, packaging.
+> Status: Phases 0–10 are done: the backend (ingestion, cited chat, conversations, study tools,
+> evaluation), the React frontend, hardening (see [Hardening](#hardening-phase-9)) and Windows
+> packaging (see [Quick start (Windows)](#quick-start-windows) and
+> [the Phase 10 notes](docs/phase-notes/phase-10-packaging.md)).
 
 ## Quick start (Windows)
 

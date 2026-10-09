@@ -14,7 +14,7 @@ Environment: Windows, PowerShell, Python 3.11, venv at backend/.venv.
 - Frontend later: React + Vite + TypeScript + Tailwind
 
 ## Done so far
-Phases 0 to 9 are complete: ingestion API (upload/list/delete), LLM client
+Phases 0 to 10 are complete: ingestion API (upload/list/delete), LLM client
 with retries and an optional fallback model, POST /chat with a similarity
 threshold, citation validation, a reason field, the orphan-chunk fix and the
 diagram-noise filter; conversations (stored messages, follow-up rewriting with
@@ -34,7 +34,12 @@ retrieval-only; missing-key banner and llm_configured/max_upload_mb in /health;
 daily quota as 429; early 413 from Content-Length and batched Chroma adds; 422s for
 empty, password-protected and damaged PDFs and text_page_count on upload; catch-all
 JSON 500 and error codes; startup cleanup; summary time budget; input limits;
-SQLite foreign keys, WAL and busy timeout; recap in docs/phase-notes/phase-9-hardening.md).
+SQLite foreign keys, WAL and busy timeout; recap in docs/phase-notes/phase-9-hardening.md);
+Windows packaging (Phase 10: app.web:site serves the API under /api and frontend/dist
+at / on one port; scripts\setup.ps1 and scripts\start.ps1; .env.example lists every
+setting at its default, kept in step by a test; README Quick start and Troubleshooting;
+recap in docs/phase-notes/phase-10-packaging.md). The developer workflow
+(uvicorn app.main:app --reload + npm run dev) is unchanged.
 retrieval_top_k is 8 since Phase 9 (was 5). The front-matter filter
 (exclude_front_matter) was measured in Phase 9 and stays off by my decision: no
 gain in expected page kept or hit@8 (37/39 tuning, 22/31 reworded, 5/6 held-out).
@@ -45,8 +50,11 @@ startup_cleanup stays False until I say otherwise (report-only run found nothing
 study_max_seconds is 180. Never commit backend/data/ (it holds studymate.db, its
 -wal/-shm files and my backup studymate.db.bak).
 Evaluation PDFs are git-ignored; never commit them or backend/evaluation/results/.
+Scripts never overwrite, read or print backend\.env (create it only if missing), never
+touch backend\data, and are never test-run on my real project folder (use a temporary
+copy without backend\data and backend\.env).
 Notes are in docs/phase-notes/.
-Next: Phase 10 (packaging).
+Next: the roadmap is complete; wait for my instructions.
 
 ## Roadmap (one phase at a time, never start the next without my OK)
 5 Conversation, 6 Study tools, 7 Evaluation, 8 Frontend, 9 Hardening,
