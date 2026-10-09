@@ -248,9 +248,9 @@ are git-ignored). StudyMate works with any PDFs you upload yourself.
 
 | Document | Used for | Source | Licence |
 |---|---|---|---|
-| MSFC Skylab Crew Systems Mission Evaluation (NASA TM X-64825), `19740024203.pdf` | Evaluation | `<TO FILL IN>` | `<TO FILL IN>` |
-| Space Telescope Focal Plane Camera Final Report (NASA-CR-150117), `19770007900.pdf` | Evaluation | `<TO FILL IN>` | `<TO FILL IN>` |
-| IPCC AR6 Synthesis Report, Summary for Policymakers, `IPCC_AR6_SYR_SPM.pdf` | Evaluation | `<TO FILL IN>` | `<TO FILL IN>` |
+| MSFC Skylab Crew Systems Mission Evaluation (NASA TM X-64825), `19740024203.pdf` | Evaluation | NASA technical report | NASA in-house report; I am not redistributing the PDF |
+| Space Telescope Focal Plane Camera Final Report (NASA-CR-150117), `19770007900.pdf` | Evaluation | NASA Technical Reports Server (ntrs.nasa.gov), document 19770007900, NASA-CR-150117, contractor report, April 1976 | Public Use Permitted (as stated on the NTRS record); I am not redistributing the PDF |
+| IPCC AR6 Synthesis Report, Summary for Policymakers, `IPCC_AR6_SYR_SPM.pdf` | Evaluation | ipcc.ch | IPCC permits short attributed extracts; the PDF is not in this repository |
 | `sample1.pdf` | Manual checks | `<TO FILL IN>` | `<TO FILL IN>` |
 
 ## Tech stack
